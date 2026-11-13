@@ -36,10 +36,14 @@ jobs:
           STUB
           chmod +x "$RUNNER_TEMP/stub/gh"
           echo "$RUNNER_TEMP/stub" >>"$GITHUB_PATH"
+      - name: Write a failed workflow_run event
+        run: |
+          echo '{"workflow_run": {"id": 42, "conclusion": "failure", "head_sha": "abc123", "html_url": "https://example.test/runs/42", "pull_requests": []}}' >"$RUNNER_TEMP/event.json"
       - id: comment
         uses: ./actions/ci-failure-comment
         with:
           bot: homelab-cyrus[bot]
+          event-path: ${{ runner.temp }}/event.json
       - name: Assert the action ran the script against the caller repository
         env:
           REPO: ${{ github.repository }}
