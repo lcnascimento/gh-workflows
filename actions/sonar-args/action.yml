@@ -46,9 +46,10 @@ runs:
         elif [[ "$REF_NAME" == "$DEFAULT_BRANCH" ]]; then
           args+=(-Dsonar.qualitygate.wait=true)
         fi
+        coverage="$RUNNER_TEMP/sonar-coverage/$COVERAGE_ARTIFACT"
         reports() {
-          [[ -n "$COVERAGE_ARTIFACT" ]] || return 0
-          find "$RUNNER_TEMP/sonar-coverage/$COVERAGE_ARTIFACT" -type f -name "*.$1" 2>/dev/null | sort | paste -sd , -
+          [[ -n "$COVERAGE_ARTIFACT" && -d "$coverage" ]] || return 0
+          find "$coverage" -type f -name "*.$1" | sort | paste -sd , -
         }
         while read -r extension param; do
           paths=$(reports "$extension")
