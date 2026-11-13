@@ -23,3 +23,8 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/test-lint-workflows.yml
+
+  test-renovate-preset:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/test-renovate-preset.yml
