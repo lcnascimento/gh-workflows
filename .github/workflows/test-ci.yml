@@ -82,5 +82,5 @@ jobs:
           INSTALLED: ${{ toJSON(steps.runtime.outputs) }}
         run: |
           echo "$INSTALLED"
-          test "$(jq -c . <<< "$INSTALLED")" = '{"go":"false","node":"false","python":"false","opentofu":"false"}'
+          test "$(jq -cS . <<< "$INSTALLED")" = '{"go":"false","node":"false","opentofu":"false","python":"false"}'
           ! command -v tofu
