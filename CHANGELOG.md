@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.3.0](https://github.com/lcnascimento/gh-workflows/compare/v1.2.0...v1.3.0) (2026-11-13)
+
+
+### Features
+
+* **ci-failure-comment:** wake the bot on open threads of the reviewer ([b040be8](https://github.com/lcnascimento/gh-workflows/commit/b040be8f4b2f2cbe43f6b327a82e83618797af99))
+* **relay:** relay pull_request_review events of the reviewer login ([e57188d](https://github.com/lcnascimento/gh-workflows/commit/e57188d40ab754ef0b0542fb86bd527728639f2c))
+* **relay:** wake the bot on open threads of the reviewer ([a5a1b12](https://github.com/lcnascimento/gh-workflows/commit/a5a1b12212d24c776a1a9a35b722b3a398da371b))
+
+
+### Bug Fixes
+
+* **ci-failure-comment:** count threads whose author was deleted ([c9bc757](https://github.com/lcnascimento/gh-workflows/commit/c9bc75717914e45530945bdf7aeeca1300ba8885))
+* **ci-failure-comment:** match logins case-insensitively and count newest threads ([6f3738c](https://github.com/lcnascimento/gh-workflows/commit/6f3738c398d26f48b797f4826e41332bf6dc01a7))
+
 ## [1.2.0](https://github.com/lcnascimento/gh-workflows/compare/v1.1.0...v1.2.0) (2026-11-13)
 
 
