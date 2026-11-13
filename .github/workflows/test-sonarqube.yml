@@ -97,6 +97,8 @@ jobs:
           PYTHON: ${{ steps.python.outputs.args }}
           PYTHON_ARTIFACT: ${{ needs.python.outputs.coverage-artifact }}
           HCL: ${{ steps.hcl.outputs.args }}
+          GO_KEY: ${{ steps.go.outputs.project-key }}
+          TYPESCRIPT_KEY: ${{ steps.typescript.outputs.project-key }}
         run: |
           status=0
           check() {
@@ -112,4 +114,6 @@ jobs:
           check "main, key override, lcov" "$TYPESCRIPT" "-Dsonar.projectKey=homelab-typescript -Dsonar.qualitygate.wait=true -Dsonar.javascript.lcov.reportPaths=$ts_dir/unit.lcov"
           check "other branch, Cobertura" "$PYTHON" "-Dsonar.projectKey=gh-workflows -Dsonar.python.coverage.reportPaths=$py_dir/unit.xml"
           check "pull request, no coverage" "$HCL" "-Dsonar.projectKey=homelab-hcl -Dsonar.scm.revision=fedcba9876543210fedcba9876543210fedcba98"
+          check "project-key output, default" "$GO_KEY" gh-workflows
+          check "project-key output, override" "$TYPESCRIPT_KEY" homelab-typescript
           exit "$status"

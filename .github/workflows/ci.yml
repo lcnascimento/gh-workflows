@@ -86,8 +86,6 @@ jobs:
         run: git diff --exit-code -- .
       - name: lint-workflows
         uses: $/actions/lint-workflows
-        with:
-          path: ${{ inputs.working-directory }}/.github/workflows
 
   test-unit:
     needs: discover

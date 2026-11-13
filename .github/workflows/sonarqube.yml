@@ -63,7 +63,7 @@ jobs:
       - if: always() && steps.args.outcome == 'success' && vars.SONAR_PUBLIC_URL != ''
         env:
           SONAR_PUBLIC_URL: ${{ vars.SONAR_PUBLIC_URL }}
-          PROJECT_KEY: ${{ inputs.project-key || github.event.repository.name }}
+          PROJECT_KEY: ${{ steps.args.outputs.project-key }}
           PULL_REQUEST: ${{ github.event.pull_request.number }}
           BRANCH: ${{ github.ref_name }}
         run: |
