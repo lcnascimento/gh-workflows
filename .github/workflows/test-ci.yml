@@ -12,6 +12,7 @@ jobs:
     uses: ./.github/workflows/ci.yml
     with:
       working-directory: testdata/ci/clean
+      sonar: false
 
   runner-input:
     permissions:
@@ -19,6 +20,7 @@ jobs:
     uses: ./.github/workflows/ci.yml
     with:
       working-directory: testdata/ci/clean
+      sonar: false
       runner: ubuntu-24.04-arm
 
   assert-runner:
@@ -43,6 +45,7 @@ jobs:
     uses: ./.github/workflows/ci.yml
     with:
       working-directory: testdata/ci/typescript
+      sonar: false
 
   python:
     permissions:
@@ -50,6 +53,7 @@ jobs:
     uses: ./.github/workflows/ci.yml
     with:
       working-directory: testdata/ci/python
+      sonar: false
 
   hcl:
     permissions:
@@ -57,6 +61,7 @@ jobs:
     uses: ./.github/workflows/ci.yml
     with:
       working-directory: testdata/ci/hcl
+      sonar: false
 
   no-manifest:
     permissions:
@@ -64,6 +69,7 @@ jobs:
     uses: ./.github/workflows/ci.yml
     with:
       working-directory: testdata/ci/no-manifest
+      sonar: false
 
   setup-runtime-no-manifest:
     runs-on: ubuntu-latest
@@ -91,6 +97,7 @@ jobs:
     uses: ./.github/workflows/ci.yml
     with:
       working-directory: testdata/ci/levels
+      sonar: false
 
   doppler:
     permissions:
@@ -98,6 +105,7 @@ jobs:
     uses: ./.github/workflows/ci.yml
     with:
       working-directory: testdata/ci/doppler
+      sonar: false
     secrets:
       doppler-token: dp.st.hlb-206-dummy
 
