@@ -9,5 +9,16 @@ inputs:
 runs:
   using: composite
   steps:
+    - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      with:
+        # renovate: datasource=github-releases depName=astral-sh/uv
+        version: 0.13.8
+        enable-cache: false
     - shell: bash
-      run: "true"
+      env:
+        # renovate: datasource=pypi depName=actionlint-py
+        ACTIONLINT_VERSION: 1.7.12.25
+        # renovate: datasource=pypi depName=zizmor
+        ZIZMOR_VERSION: 1.32.0
+        WORKFLOWS: ${{ inputs.path }}
+      run: "$GITHUB_ACTION_PATH/lint-workflows.sh"
