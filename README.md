@@ -7,8 +7,9 @@ Workflows reusáveis e composite actions da CI dos Consumidores. Um repo em Go, 
 |---|---|---|
 | `ci.yml` | `lcnascimento/gh-workflows/.github/workflows/ci.yml` | CI completa: `discover`, `lint`, um job por nível de teste e o `sonarqube` aninhado. |
 | `sonarqube.yml` | `lcnascimento/gh-workflows/.github/workflows/sonarqube.yml` | Uma análise do SonarQube, invocável sozinha. |
+| `relay.yml` | `lcnascimento/gh-workflows/.github/workflows/relay.yml` | Acorda o bot do Cyrus quando a CI de um PR dele falha, com limite de iterações por PR. |
 | `lint-workflows` | `lcnascimento/gh-workflows/actions/lint-workflows` | actionlint e zizmor sobre os workflows do repo. |
-| `ci-failure-comment` | `lcnascimento/gh-workflows/actions/ci-failure-comment` | Menciona um bot no PR cuja CI falhou, uma vez por commit. |
+| `ci-failure-comment` | `lcnascimento/gh-workflows/actions/ci-failure-comment` | Menciona um bot no PR cuja CI falhou, uma vez por commit e até um limite por PR. É a lógica do `relay.yml`. |
 | `default.json` | `github>lcnascimento/gh-workflows` | Preset do Renovate. |
 
 Os exemplos de caller ficam em [`examples/.github/workflows/`](examples/.github/workflows/): copie para o `.github/workflows/` do Consumidor.
@@ -114,6 +115,35 @@ Uma análise só, num job com `fetch-depth: 0` e o `SonarSource/sonarqube-scan-a
 
 Secret `sonar-token` (token de análise do projeto) e variáveis `SONAR_HOST_URL` e `SONAR_PUBLIC_URL`, como no `ci.yml`. Sem o token ou sem `SONAR_HOST_URL`, o job falha no step `sonar-token`.
 
+## `relay.yml`
+
+O relay acorda o Cyrus quando a CI do Consumidor falha num PR aberto pelo bot. O caller reage ao `workflow_run` (`completed`) do workflow de CI e chama o reusável, que roda a action `ci-failure-comment` do mesmo SHA.
+
+| Input | Tipo | Default | Descrição |
+|---|---|---|---|
+| `bot-login` | string | obrigatório | Login do bot, ex.: `homelab-cyrus[bot]`. O relay só age em PRs com esse autor e menciona esse login. |
+| `max-iterations` | number | `3` | Máximo de relatos automáticos por PR. |
+
+Sem secrets: o relay usa o `GITHUB_TOKEN` do caller.
+
+A cada `workflow_run`, o relay:
+
+1. ignora a run se a conclusão não for `failure`;
+2. acha o PR da run (pelo evento ou, num PR de fork, pelo head SHA entre os PRs abertos) e o ignora se estiver fechado ou se o autor não for `bot-login`;
+3. ignora o SHA que já tem relato;
+4. ao atingir `max-iterations` relatos, posta um aviso final sem menção, uma vez só, e depois não comenta mais;
+5. senão, comenta mencionando o bot, com o link da run e os jobs que falharam.
+
+A contagem sai dos comentários do PR, sem estado externo. Cada relato leva o marcador invisível `<!-- cyrus-ci-failure sha=<sha> -->`, e o aviso final leva `<!-- cyrus-ci-failure limit -->`.
+
+O reusável não faz checkout: o script vem da action no SHA do reusável, e nenhum código do PR roda no gatilho privilegiado. Por isso o `workflow_run` do caller leva um `# zizmor: ignore[dangerous-triggers]`.
+
+| Job | Permissões |
+|---|---|
+| `relay` | `actions: read`, `pull-requests: write` |
+
+`pull-requests: write` lê o PR e comenta nele. `actions: read` lista os jobs da run para o comentário: num repo privado, a API de jobs nega o token sem ela.
+
 ## `actions/lint-workflows`
 
 Roda actionlint e zizmor sobre os arquivos `*.yml` e `*.yaml` de um diretório. Sem workflows no diretório, só emite um aviso.
@@ -126,15 +156,17 @@ O zizmor usa o `.github/zizmor.yml` ou o `zizmor.yml` do repo quando existe. Sem
 
 ## `actions/ci-failure-comment`
 
-Num workflow disparado por `workflow_run`, comenta no PR da run que falhou mencionando um bot (ex.: o Cyrus), uma vez por commit e no máximo `max-attempts` vezes por PR.
+Num workflow disparado por `workflow_run`, comenta no PR aberto da run que falhou mencionando um bot (ex.: o Cyrus), uma vez por commit e no máximo `max-attempts` vezes por PR. Ao atingir o limite, posta um aviso final sem menção. É a única dona das regras do relay: o `relay.yml` só a chama.
 
 | Input | Default | Descrição |
 |---|---|---|
 | `bot` | obrigatório | Login do bot, ex.: `homelab-cyrus[bot]`. |
+| `author` | `""` | Só comenta em PRs desse autor. Vazio aceita qualquer autor. |
 | `max-attempts` | `"3"` | Máximo de relatos de falha por PR. |
+| `event-path` | `${{ github.event_path }}` | Caminho do payload do `workflow_run`. |
 | `token` | `${{ github.token }}` | Token para ler PRs e comentar. |
 
-O job que chama a action precisa de `pull-requests: write`.
+O job que chama a action precisa de `pull-requests: write`. Com `actions: read`, o comentário lista os jobs que falharam; sem ela, a action emite um aviso e comenta sem a lista.
 
 ## Teto de permissões
 
@@ -145,7 +177,8 @@ O caller começa com `permissions: {}` no workflow e concede, no job que chama o
 | `ci.yml` | `contents: read` |
 | `sonarqube.yml` | `contents: read` |
 | `lint-workflows` | `contents: read` |
-| `ci-failure-comment` | `pull-requests: write` |
+| `relay.yml` | `actions: read`, `pull-requests: write` |
+| `ci-failure-comment` | `pull-requests: write` (mais `actions: read` para listar os jobs) |
 
 ## Runner
 
@@ -157,6 +190,7 @@ Os reusáveis não definem `concurrency`: o caller decide o cancelamento. Os exe
 
 - [`ci.yml`](examples/.github/workflows/ci.yml): chama o `ci.yml` com `sonar-token` e `doppler-token`.
 - [`sonarqube.yml`](examples/.github/workflows/sonarqube.yml): chama o `sonarqube.yml` sozinho, para um repo cuja CI não é o `ci.yml`.
+- [`relay.yml`](examples/.github/workflows/relay.yml): chama o `relay.yml` quando o workflow `ci` termina. O `workflow_run` leva um `# zizmor: ignore[dangerous-triggers]` porque o relay só lê os metadados da run e do PR e nunca faz checkout.
 - [`ci-failure.yml`](examples/.github/workflows/ci-failure.yml): menciona o Cyrus quando o workflow `ci` falha num PR. O `workflow_run` leva um `# zizmor: ignore[dangerous-triggers]` porque o job só lê os metadados da run e nunca faz checkout do código do PR.
 
 Os exemplos `ci.yml` e `sonarqube.yml` são alternativas: copie um ou outro, nunca os dois. O `ci.yml` já roda o `sonarqube.yml` aninhado, e os dois juntos fazem duas análises por evento.

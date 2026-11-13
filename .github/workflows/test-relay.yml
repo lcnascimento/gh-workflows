@@ -1,0 +1,15 @@
+name: test-relay
+
+on:
+  workflow_call:
+
+permissions: {}
+
+jobs:
+  relay:
+    permissions:
+      actions: read
+      pull-requests: write
+    uses: ./.github/workflows/relay.yml
+    with:
+      bot-login: homelab-cyrus[bot]
