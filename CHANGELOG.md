@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.0](https://github.com/lcnascimento/gh-workflows/compare/v1.1.0...v1.2.0) (2026-11-13)
+
+
+### Features
+
+* **ci:** run discover on ubuntu-latest ([01f0404](https://github.com/lcnascimento/gh-workflows/commit/01f0404fb0a8662a5c833364802f3d61fc4813f6))
+* **ci:** run discover on ubuntu-latest ([3e560c6](https://github.com/lcnascimento/gh-workflows/commit/3e560c676b006d3182f9b78b3e21c3ce38f6ca94))
+
 ## [1.1.0](https://github.com/lcnascimento/gh-workflows/compare/v1.0.0...v1.1.0) (2026-11-13)
 
 
