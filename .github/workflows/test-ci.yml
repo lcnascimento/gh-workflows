@@ -36,3 +36,72 @@ jobs:
           echo "vars.CI_RUNNER='$CI_RUNNER' no-input=$FROM_VARS input=$FROM_INPUT"
           test "$FROM_VARS" = "$expected"
           test "$FROM_INPUT" = ubuntu-24.04-arm
+
+  levels:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+    with:
+      working-directory: testdata/ci/levels
+
+  doppler:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+    with:
+      working-directory: testdata/ci/doppler
+    secrets:
+      doppler-token: dp.st.hlb-206-dummy
+
+  assert-levels:
+    needs: [clean, levels, doppler]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}/jobs
+        run: |
+          jobs=$(gh api --paginate "$RUN" --jq '.jobs[] | {name, conclusion}' | jq -s .)
+          status=0
+          while IFS='|' read -r name conclusion; do
+            got=$(jq -r --arg n "$name" '.[] | select(.name == $n) | .conclusion' <<<"$jobs")
+            echo "$name: want $conclusion got $got"
+            [[ "$got" == "$conclusion" ]] || status=1
+          done <<'EXPECT'
+          clean / test-unit|success
+          clean / test-component|skipped
+          clean / test-integration|skipped
+          clean / test-e2e|skipped
+          levels / test-unit|success
+          levels / test-component|skipped
+          levels / test-integration|success
+          levels / test-e2e|success
+          doppler / lint|success
+          doppler / test-unit|success
+          doppler / test-component|success
+          doppler / test-integration|success
+          doppler / test-e2e|success
+          EXPECT
+          exit "$status"
+
+  assert-coverage:
+    needs: levels
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: ${{ needs.levels.outputs.coverage-artifact }}-*
+          path: coverage
+      - env:
+          PREFIX: ${{ needs.levels.outputs.coverage-artifact }}
+        run: |
+          got=$(cd coverage && find . -type f | sed "s|^\./$PREFIX-||" | sort)
+          want=$'e2e/e2e.out\nintegration/integration.out\nunit/unit.out'
+          echo "$got"
+          [[ -n "$PREFIX" && "$got" == "$want" ]]
