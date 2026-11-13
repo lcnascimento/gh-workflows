@@ -23,3 +23,8 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/test-lint-workflows.yml
+
+  test-ci-failure-comment:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/test-ci-failure-comment.yml
