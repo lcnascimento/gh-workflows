@@ -6,6 +6,20 @@ inputs:
     description: Directory with the manifests
     default: .
 
+outputs:
+  go:
+    description: Whether Go was installed from go.mod
+    value: ${{ steps.manifest.outputs.go }}
+  node:
+    description: Whether Node.js was installed from .nvmrc
+    value: ${{ steps.manifest.outputs.node }}
+  python:
+    description: Whether uv was installed for .python-version or pyproject.toml
+    value: ${{ steps.manifest.outputs.python }}
+  opentofu:
+    description: Whether OpenTofu was installed from .opentofu-version
+    value: ${{ steps.manifest.outputs.opentofu }}
+
 runs:
   using: composite
   steps:
@@ -14,10 +28,33 @@ runs:
       env:
         DIR: ${{ inputs.working-directory }}
       run: |
-        [[ -f "$DIR/go.mod" ]] && go=true || go=false
-        echo "go=$go" >> "$GITHUB_OUTPUT"
+        detect() {
+          local runtime=$1 found=false
+          shift
+          for manifest in "$@"; do
+            [[ -f "$DIR/$manifest" ]] && found=true
+          done
+          echo "$runtime=$found" >> "$GITHUB_OUTPUT"
+        }
+        detect go go.mod
+        detect node .nvmrc
+        detect python .python-version pyproject.toml
+        detect opentofu .opentofu-version
     - if: steps.manifest.outputs.go == 'true'
       uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
       with:
         go-version-file: ${{ inputs.working-directory }}/go.mod
         cache-dependency-path: ${{ inputs.working-directory }}/go.mod
+    - if: steps.manifest.outputs.node == 'true'
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version-file: ${{ inputs.working-directory }}/.nvmrc
+    - if: steps.manifest.outputs.python == 'true'
+      uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      with:
+        working-directory: ${{ inputs.working-directory }}
+    - if: steps.manifest.outputs.opentofu == 'true'
+      uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+      with:
+        tofu_version_file: ${{ inputs.working-directory }}/.opentofu-version
+        tofu_wrapper: false
