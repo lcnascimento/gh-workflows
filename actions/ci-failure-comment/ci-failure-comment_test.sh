@@ -39,6 +39,12 @@ JSON
   api 'repos/o/r/actions/runs/42/jobs?per_page=100' '{"jobs": [{"name": "discover", "conclusion": "success"}, {"name": "lint", "conclusion": "failure"}, {"name": "test-unit", "conclusion": "failure"}]}'
 }
 
+check_event() {
+  cat >"$work/event.json" <<JSON
+{"check_run": {"id": 77, "name": "${3:-SonarQube Code Analysis}", "conclusion": "${2:-failure}", "head_sha": "abc123", "html_url": "https://github.com/o/r/runs/77", "pull_requests": $1}}
+JSON
+}
+
 pr() { api "repos/o/r/pulls/$1" "{\"number\": $1, \"state\": \"${3:-open}\", \"user\": {\"login\": \"${2:-homelab-cyrus[bot]}\"}}"; }
 
 api() { printf '%s' "$2" >"$work/api/${1//[\/?&=]/_}.json"; }
@@ -165,5 +171,78 @@ check "omits the job list when the jobs API is denied" "$(posted 7)" '@homelab-c
 Investigue a falha e envie uma correção para este PR.
 
 <!-- cyrus-ci-failure sha=abc123 -->'
+
+sonar_body='@homelab-cyrus[bot] o SonarQube reprovou o commit abc123: https://github.com/o/r/runs/77
+
+Investigue os problemas apontados e envie uma correção para este PR.
+
+<!-- cyrus-ci-failure sha=abc123 -->'
+
+setup
+check_event '[{"number": 7}]'
+pr 7
+api repos/o/r/issues/7/comments '[]'
+run
+check "comments on a failed Sonar check" "$(posted 7)" "$sonar_body"
+
+for conclusion in success neutral skipped; do
+  setup
+  check_event '[{"number": 7}]' "$conclusion"
+  pr 7
+  api repos/o/r/issues/7/comments '[]'
+  run
+  check "skips a Sonar check that concluded $conclusion" "$(posted 7)|$(cat "$work/out")" "|check run 77 concluded $conclusion"
+done
+
+setup
+check_event '[{"number": 7}]' failure lint
+pr 7
+api repos/o/r/issues/7/comments '[]'
+run
+check "skips a failed check run of another name" "$(posted 7)|$(cat "$work/out")" "|check run lint is not SonarQube Code Analysis"
+
+setup
+check_event '[{"number": 7}]'
+pr 7
+api repos/o/r/issues/7/comments "[{\"body\": $(jq -Rs . <<<"$expected_body")}]"
+run
+check "skips a Sonar failure on a SHA already reported by CI" "$(posted 7)|$(cat "$work/out")" "|PR #7 already reported for abc123"
+
+setup
+event '[{"number": 7}]'
+pr 7
+api repos/o/r/issues/7/comments "[{\"body\": $(jq -Rs . <<<"$sonar_body")}]"
+run
+check "skips a CI failure on a SHA already reported by Sonar" "$(posted 7)|$(cat "$work/out")" "|PR #7 already reported for abc123"
+
+setup
+check_event '[]'
+api 'repos/o/r/pulls?state=open&per_page=100' '[{"number": 9, "state": "open", "user": {"login": "homelab-cyrus[bot]"}, "head": {"sha": "abc123"}}]'
+api repos/o/r/issues/9/comments '[]'
+run
+check "finds the PR of a Sonar check by head SHA" "$(posted 9)" "$sonar_body"
+
+setup
+check_event '[{"number": 7}]'
+pr 7 renovate[bot]
+api repos/o/r/issues/7/comments '[]'
+run
+check "skips a Sonar failure on a PR of another author" "$(posted 7)|$(cat "$work/out")" "|PR #7 is by renovate[bot], not homelab-cyrus[bot]"
+
+setup
+check_event '[{"number": 7}]'
+pr 7 homelab-cyrus[bot] closed
+api repos/o/r/issues/7/comments '[]'
+run
+check "skips a Sonar failure on a closed PR" "$(posted 7)|$(cat "$work/out")" "|PR #7 is closed"
+
+setup
+check_event '[{"number": 7}]'
+pr 7
+api repos/o/r/issues/7/comments '[{"body": "<!-- cyrus-ci-failure sha=a -->"}, {"body": "<!-- cyrus-ci-failure sha=b -->"}, {"body": "<!-- cyrus-ci-failure sha=c -->"}]'
+run
+check "counts Sonar failures against the same limit" "$(posted 7)|$(cat "$work/out")" "O relay parou depois de 3 relatos de falha neste PR. A falha do commit abc123 (https://github.com/o/r/runs/77) precisa de um humano.
+
+<!-- cyrus-ci-failure limit -->|PR #7 reached 3 CI failure reports"
 
 exit "$failures"

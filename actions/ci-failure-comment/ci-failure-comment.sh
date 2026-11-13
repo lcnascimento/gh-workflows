@@ -3,15 +3,27 @@ set -euo pipefail
 
 : "${GITHUB_EVENT_PATH:?}" "${REPO:?}" "${BOT:?}" "${MAX_ATTEMPTS:?}"
 
-run_id="$(jq -r '.workflow_run.id' "$GITHUB_EVENT_PATH")"
-conclusion="$(jq -r '.workflow_run.conclusion' "$GITHUB_EVENT_PATH")"
+sonar_check="SonarQube Code Analysis"
+
+if jq -e 'has("check_run")' "$GITHUB_EVENT_PATH" >/dev/null; then
+  source=check_run label="check run"
+  name="$(jq -r '.check_run.name' "$GITHUB_EVENT_PATH")"
+  if [[ "$name" != "$sonar_check" ]]; then
+    echo "check run $name is not $sonar_check"
+    exit 0
+  fi
+else
+  source=workflow_run label=run
+fi
+id="$(jq -r --arg s "$source" '.[$s].id' "$GITHUB_EVENT_PATH")"
+conclusion="$(jq -r --arg s "$source" '.[$s].conclusion' "$GITHUB_EVENT_PATH")"
 if [[ "$conclusion" != failure ]]; then
-  echo "run $run_id concluded $conclusion"
+  echo "$label $id concluded $conclusion"
   exit 0
 fi
-sha="$(jq -r '.workflow_run.head_sha' "$GITHUB_EVENT_PATH")"
-run_url="$(jq -r '.workflow_run.html_url' "$GITHUB_EVENT_PATH")"
-pr="$(jq -r '.workflow_run.pull_requests[0].number // empty' "$GITHUB_EVENT_PATH")"
+sha="$(jq -r --arg s "$source" '.[$s].head_sha' "$GITHUB_EVENT_PATH")"
+run_url="$(jq -r --arg s "$source" '.[$s].html_url' "$GITHUB_EVENT_PATH")"
+pr="$(jq -r --arg s "$source" '.[$s].pull_requests[0].number // empty' "$GITHUB_EVENT_PATH")"
 
 if [[ -n "$pr" ]]; then
   pull="$(gh api "repos/$REPO/pulls/$pr")"
@@ -57,14 +69,24 @@ $limit_marker" >/dev/null
   exit 0
 fi
 
+if [[ "$source" == check_run ]]; then
+  gh api -X POST "repos/$REPO/issues/$pr/comments" -f body="@$BOT o SonarQube reprovou o commit $sha: $run_url
+
+Investigue os problemas apontados e envie uma correção para este PR.
+
+$marker" >/dev/null
+  echo "reported $sha on PR #$pr"
+  exit 0
+fi
+
 jobs_section=""
-if jobs="$(gh api --paginate "repos/$REPO/actions/runs/$run_id/jobs?per_page=100")"; then
+if jobs="$(gh api --paginate "repos/$REPO/actions/runs/$id/jobs?per_page=100")"; then
   jobs_section="Jobs que falharam:
 $(jq -r '.jobs[] | select(.conclusion == "failure") | "- " + .name' <<<"$jobs")
 
 "
 else
-  echo "::warning::could not list the jobs of run $run_id; grant actions: read to include them"
+  echo "::warning::could not list the jobs of run $id; grant actions: read to include them"
 fi
 
 gh api -X POST "repos/$REPO/issues/$pr/comments" -f body="@$BOT o CI falhou no commit $sha: $run_url

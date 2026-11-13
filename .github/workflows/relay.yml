@@ -16,6 +16,9 @@ permissions: {}
 
 jobs:
   relay:
+    if: github.event_name != 'check_run' || (github.event.check_run.name == 'SonarQube Code Analysis' && github.event.check_run.conclusion == 'failure')
+    concurrency:
+      group: ${{ github.workflow }}-relay-${{ github.event.workflow_run.head_sha || github.event.check_run.head_sha }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

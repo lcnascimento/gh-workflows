@@ -4,11 +4,10 @@ on:
   workflow_run: # zizmor: ignore[dangerous-triggers] the relay reads only run and PR metadata and never checks out code
     workflows: [ci]
     types: [completed]
+  check_run: # zizmor: ignore[dangerous-triggers] the relay reads only check and PR metadata and never checks out code
+    types: [completed]
 
 permissions: {}
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.workflow_run.head_sha }}
 
 jobs:
   relay:
