@@ -15,6 +15,12 @@ IFS=$'\x1f' read -r kind name id conclusion sha run_url pr < <(
 
 post_comment() { gh api -X POST "repos/$REPO/issues/$pr/comments" -f body="$1" >/dev/null; }
 
+report() {
+  post_comment "$1"
+  echo "reported $sha on PR #$pr"
+  exit 0
+}
+
 if [[ "$kind" == review ]]; then
   if [[ -z "${REVIEWER:-}" ]]; then
     echo "review $id ignored without a reviewer login"
@@ -61,7 +67,7 @@ if [[ "$kind" == review ]]; then
     query($owner: String!, $name: String!, $number: Int!) {
       repository(owner: $owner, name: $name) {
         pullRequest(number: $number) {
-          reviewThreads(first: 100) {
+          reviewThreads(last: 100) {
             nodes {
               isResolved
               opener: comments(first: 1) { nodes { author { login } } }
@@ -73,8 +79,8 @@ if [[ "$kind" == review ]]; then
     }' | jq --arg reviewer "${REVIEWER%\[bot\]}" --arg bot "${BOT%\[bot\]}" '
       [.data.repository.pullRequest.reviewThreads.nodes[]
         | select((.isResolved | not)
-          and .opener.nodes[0].author.login == $reviewer
-          and .latest.nodes[0].author.login != $bot)]
+          and (.opener.nodes[0].author.login | ascii_downcase) == ($reviewer | ascii_downcase)
+          and (.latest.nodes[0].author.login | ascii_downcase) != ($bot | ascii_downcase))]
       | length')"
   if ((open_threads == 0)); then
     echo "PR #$pr has no open threads of $REVIEWER"
@@ -108,21 +114,17 @@ $limit_marker"
 fi
 
 if [[ "$kind" == review ]]; then
-  post_comment "@$BOT o Revisor deixou $open_threads threads abertas no commit $sha: $run_url
+  report "@$BOT o Revisor deixou $open_threads threads abertas no commit $sha: $run_url
 
 $marker"
-  echo "reported $sha on PR #$pr"
-  exit 0
 fi
 
 if [[ "$kind" == check_run ]]; then
-  post_comment "@$BOT o SonarQube reprovou o commit $sha: $run_url
+  report "@$BOT o SonarQube reprovou o commit $sha: $run_url
 
 Investigue os problemas apontados e envie uma correção para este PR.
 
 $marker"
-  echo "reported $sha on PR #$pr"
-  exit 0
 fi
 
 jobs_section=""
@@ -138,9 +140,8 @@ else
   echo "::warning::could not list the jobs of run $id; grant actions: read to include them"
 fi
 
-post_comment "@$BOT o CI falhou no commit $sha: $run_url
+report "@$BOT o CI falhou no commit $sha: $run_url
 
 ${jobs_section}Investigue a falha e envie uma correção para este PR.
 
 $marker"
-echo "reported $sha on PR #$pr"
