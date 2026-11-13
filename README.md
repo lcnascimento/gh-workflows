@@ -159,6 +159,8 @@ Os reusáveis não definem `concurrency`: o caller decide o cancelamento. Os exe
 - [`sonarqube.yml`](examples/.github/workflows/sonarqube.yml): chama o `sonarqube.yml` sozinho, para um repo cuja CI não é o `ci.yml`.
 - [`ci-failure.yml`](examples/.github/workflows/ci-failure.yml): menciona o Cyrus quando o workflow `ci` falha num PR. O `workflow_run` leva um `# zizmor: ignore[dangerous-triggers]` porque o job só lê os metadados da run e nunca faz checkout do código do PR.
 
+Os exemplos `ci.yml` e `sonarqube.yml` são alternativas: copie um ou outro, nunca os dois. O `ci.yml` já roda o `sonarqube.yml` aninhado, e os dois juntos fazem duas análises por evento.
+
 A `self-ci` passa os exemplos pelo actionlint e pelo zizmor no job `lint-examples`. O Renovate deste repo atualiza o SHA dos exemplos a cada release, como num Consumidor, então eles sempre apontam para a última versão.
 
 ## Versionamento
