@@ -1,0 +1,227 @@
+name: ci
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: Runner label; falls back to vars.CI_RUNNER, then ubuntu-latest
+        type: string
+        default: ''
+      working-directory:
+        description: Directory of the Makefile, relative to the repository root
+        type: string
+        default: .
+      sonar:
+        description: Run the SonarQube analysis after the tests
+        type: boolean
+        default: true
+      project-key:
+        description: Sonar project key; defaults to the repository name
+        type: string
+        default: ''
+    secrets:
+      sonar-token:
+        description: Analysis token of the Sonar project; required unless sonar is false
+        required: false
+      doppler-token:
+        description: Doppler service token; test.integration and test.e2e run under doppler run when set
+        required: false
+    outputs:
+      runner:
+        description: Runner label the jobs ran on
+        value: ${{ jobs.discover.outputs.runner }}
+      coverage-artifact:
+        description: Prefix of the per-level coverage artifacts, named <prefix>-<level>
+        value: ${{ jobs.discover.outputs.coverage-artifact }}
+
+permissions: {}
+
+jobs:
+  discover:
+    runs-on: ${{ inputs.runner || vars.CI_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      runner: ${{ inputs.runner || vars.CI_RUNNER || 'ubuntu-latest' }}
+      coverage-artifact: ${{ steps.levels.outputs.coverage-artifact }}
+      test-component: ${{ steps.levels.outputs.component }}
+      test-integration: ${{ steps.levels.outputs.integration }}
+      test-e2e: ${{ steps.levels.outputs.e2e }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: levels
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          for level in component integration e2e; do
+            make -n "test.$level" >/dev/null 2>&1 && present=true || present=false
+            echo "$level=$present" >> "$GITHUB_OUTPUT"
+          done
+          echo "coverage-artifact=coverage-$(head -c 4 /dev/urandom | od -An -tx1 | tr -d ' \n')" >> "$GITHUB_OUTPUT"
+
+  lint:
+    needs: discover
+    runs-on: ${{ needs.discover.outputs.runner }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: $/actions/setup-runtime
+        with:
+          working-directory: ${{ inputs.working-directory }}
+      - run: make setup
+      - name: make lint
+        run: make lint
+      - name: make format
+        run: make format
+      - name: git diff
+        run: git diff --exit-code -- .
+      - name: lint-workflows
+        uses: $/actions/lint-workflows
+
+  test-unit:
+    needs: discover
+    runs-on: ${{ needs.discover.outputs.runner }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: $/actions/setup-runtime
+        with:
+          working-directory: ${{ inputs.working-directory }}
+      - run: make setup
+      - name: make test.unit
+        run: make test.unit
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ needs.discover.outputs.coverage-artifact }}-unit
+          path: ${{ inputs.working-directory }}/.coverage/
+          include-hidden-files: true
+          if-no-files-found: ignore
+
+  test-component:
+    needs: discover
+    if: needs.discover.outputs.test-component == 'true'
+    runs-on: ${{ needs.discover.outputs.runner }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: $/actions/setup-runtime
+        with:
+          working-directory: ${{ inputs.working-directory }}
+      - run: make setup
+      - name: make test.component
+        run: make test.component
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ needs.discover.outputs.coverage-artifact }}-component
+          path: ${{ inputs.working-directory }}/.coverage/
+          include-hidden-files: true
+          if-no-files-found: ignore
+
+  test-integration:
+    needs: discover
+    if: needs.discover.outputs.test-integration == 'true'
+    runs-on: ${{ needs.discover.outputs.runner }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: $/actions/setup-runtime
+        with:
+          working-directory: ${{ inputs.working-directory }}
+      - uses: dopplerhq/cli-action@4819d808ab99e5cde19a0637a16536a4038fad73 # v4.0.1
+      - run: make setup
+      - name: make test.integration
+        env:
+          DOPPLER_TOKEN: ${{ secrets.doppler-token }}
+        run: |
+          if [[ -n "$DOPPLER_TOKEN" ]]; then
+            doppler run -- make test.integration
+          else
+            unset DOPPLER_TOKEN
+            make test.integration
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ needs.discover.outputs.coverage-artifact }}-integration
+          path: ${{ inputs.working-directory }}/.coverage/
+          include-hidden-files: true
+          if-no-files-found: ignore
+
+  test-e2e:
+    needs: discover
+    if: needs.discover.outputs.test-e2e == 'true'
+    runs-on: ${{ needs.discover.outputs.runner }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: $/actions/setup-runtime
+        with:
+          working-directory: ${{ inputs.working-directory }}
+      - uses: dopplerhq/cli-action@4819d808ab99e5cde19a0637a16536a4038fad73 # v4.0.1
+      - run: make setup
+      - name: make test.e2e
+        env:
+          DOPPLER_TOKEN: ${{ secrets.doppler-token }}
+        run: |
+          if [[ -n "$DOPPLER_TOKEN" ]]; then
+            doppler run -- make test.e2e
+          else
+            unset DOPPLER_TOKEN
+            make test.e2e
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ needs.discover.outputs.coverage-artifact }}-e2e
+          path: ${{ inputs.working-directory }}/.coverage/
+          include-hidden-files: true
+          if-no-files-found: ignore
+
+  sonarqube:
+    needs: [discover, test-unit, test-component, test-integration, test-e2e]
+    if: inputs.sonar && !cancelled() && !contains(needs.*.result, 'failure')
+    permissions:
+      contents: read
+    uses: ./.github/workflows/sonarqube.yml
+    with:
+      runner: ${{ needs.discover.outputs.runner }}
+      working-directory: ${{ inputs.working-directory }}
+      project-key: ${{ inputs.project-key }}
+      coverage-artifact: ${{ needs.discover.outputs.coverage-artifact }}
+    secrets:
+      sonar-token: ${{ secrets.sonar-token }}

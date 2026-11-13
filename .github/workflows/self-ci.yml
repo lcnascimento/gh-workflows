@@ -1,0 +1,60 @@
+name: self-ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  lint-workflows:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./actions/lint-workflows
+
+  lint-examples:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./actions/lint-workflows
+        with:
+          path: examples/.github/workflows
+
+  test-lint-workflows:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/test-lint-workflows.yml
+
+  test-ci-failure-comment:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/test-ci-failure-comment.yml
+
+  test-renovate-preset:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/test-renovate-preset.yml
+
+  test-ci:
+    permissions:
+      actions: read
+      contents: read
+    uses: ./.github/workflows/test-ci.yml
+
+  test-sonarqube:
+    permissions:
+      actions: read
+      contents: read
+    uses: ./.github/workflows/test-sonarqube.yml

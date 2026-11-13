@@ -1,0 +1,4 @@
+#!/bin/sh
+[ "$1" = run ] && [ "$2" = -- ] || exit 64
+shift 2
+DOPPLER_STUB=run exec "$@"

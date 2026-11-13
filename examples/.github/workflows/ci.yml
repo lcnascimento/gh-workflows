@@ -1,0 +1,29 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: Runner label, e.g. ubuntu-latest while the homelab-prod runner is down
+        type: string
+        default: ubuntu-latest
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  ci:
+    permissions:
+      contents: read
+    uses: lcnascimento/gh-workflows/.github/workflows/ci.yml@727d52b1f8c1764022485d8315a718d515d405ee # v1.0.0
+    with:
+      runner: ${{ inputs.runner }}
+    secrets:
+      sonar-token: ${{ secrets.SONAR_TOKEN }}
+      doppler-token: ${{ secrets.DOPPLER_TOKEN }}

@@ -1,0 +1,74 @@
+name: sonarqube
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: Runner label; falls back to vars.CI_RUNNER, then ubuntu-latest
+        type: string
+        default: ''
+      working-directory:
+        description: Project base directory, relative to the repository root
+        type: string
+        default: .
+      project-key:
+        description: Sonar project key; defaults to the repository name
+        type: string
+        default: ''
+      coverage-artifact:
+        description: Prefix of the coverage artifacts of the run, named <prefix>-<level>
+        type: string
+        default: ''
+    secrets:
+      sonar-token:
+        description: Analysis token of the Sonar project
+        required: false
+
+permissions: {}
+
+jobs:
+  sonarqube:
+    runs-on: ${{ inputs.runner || vars.CI_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: sonar-token
+        env:
+          SONAR_TOKEN: ${{ secrets.sonar-token }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+        run: |
+          status=0
+          [[ -n "$SONAR_TOKEN" ]] || { echo "::error::secret sonar-token is empty; pass it or call ci.yml with sonar: false"; status=1; }
+          [[ -n "$SONAR_HOST_URL" ]] || { echo "::error::variable SONAR_HOST_URL is not set"; status=1; }
+          exit "$status"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: args
+        uses: $/actions/sonar-args
+        with:
+          project-key: ${{ inputs.project-key }}
+          pull-request-sha: ${{ github.event.pull_request.head.sha }}
+          ref-name: ${{ github.ref_name }}
+          coverage-artifact: ${{ inputs.coverage-artifact }}
+      - uses: SonarSource/sonarqube-scan-action@e805d875275f728fac1885b413934be6d7c63f65 # v8.4.1
+        with:
+          projectBaseDir: ${{ inputs.working-directory }}
+          args: ${{ steps.args.outputs.args }}
+        env:
+          SONAR_TOKEN: ${{ secrets.sonar-token }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+      - if: always() && steps.args.outcome == 'success' && vars.SONAR_PUBLIC_URL != ''
+        env:
+          SONAR_PUBLIC_URL: ${{ vars.SONAR_PUBLIC_URL }}
+          PROJECT_KEY: ${{ steps.args.outputs.project-key }}
+          PULL_REQUEST: ${{ github.event.pull_request.number }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          if [[ -n "$PULL_REQUEST" ]]; then
+            echo "[SonarQube]($SONAR_PUBLIC_URL/dashboard?id=$PROJECT_KEY&pullRequest=$PULL_REQUEST)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "[SonarQube]($SONAR_PUBLIC_URL/dashboard?id=$PROJECT_KEY&branch=$BRANCH)" >> "$GITHUB_STEP_SUMMARY"
+          fi

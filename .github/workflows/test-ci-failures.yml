@@ -1,0 +1,86 @@
+name: test-ci-failures
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [labeled]
+
+permissions: {}
+
+jobs:
+  dirty-format:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'test-ci-failures'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+    with:
+      working-directory: testdata/ci/dirty-format
+      sonar: false
+
+  red-test:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'test-ci-failures'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+    with:
+      working-directory: testdata/ci/red-test
+      sonar: false
+
+  invalid-workflow:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'test-ci-failures'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+    with:
+      working-directory: testdata/ci/invalid-workflow
+      sonar: false
+
+  sonar-without-token:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'test-ci-failures'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+    with:
+      working-directory: testdata/ci/levels
+
+  sonarqube-without-token:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'test-ci-failures'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/sonarqube.yml
+    with:
+      working-directory: testdata/ci/levels
+
+  assert:
+    needs: [dirty-format, red-test, invalid-workflow, sonar-without-token, sonarqube-without-token]
+    if: always() && (github.event_name == 'workflow_dispatch' || github.event.label.name == 'test-ci-failures')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}/jobs
+        run: |
+          jobs=$(gh api --paginate "$RUN" --jq '.jobs[] | {name, conclusion, failed: ([.steps[] | select(.conclusion == "failure") | .name] | join(","))}' | jq -s .)
+          status=0
+          while IFS='|' read -r name conclusion failed; do
+            got=$(jq -r --arg n "$name" '.[] | select(.name == $n) | "\(.conclusion)|\(.failed)"' <<<"$jobs")
+            echo "$name: want $conclusion|$failed got $got"
+            [[ "$got" == "$conclusion|$failed" ]] || status=1
+          done <<'EXPECT'
+          dirty-format / lint|failure|git diff
+          dirty-format / test-unit|success|
+          red-test / lint|success|
+          red-test / test-unit|failure|make test.unit
+          invalid-workflow / lint|failure|lint-workflows
+          invalid-workflow / test-unit|success|
+          sonar-without-token / sonarqube / sonarqube|failure|sonar-token
+          sonarqube-without-token / sonarqube|failure|sonar-token
+          EXPECT
+          tests_done=$(gh api --paginate "$RUN" --jq '.jobs[] | select(.name | startswith("sonar-without-token / test-")) | .completed_at' | sort | tail -n 1)
+          sonar_started=$(gh api --paginate "$RUN" --jq '.jobs[] | select(.name == "sonar-without-token / sonarqube / sonarqube") | .started_at')
+          echo "last test completed at $tests_done, sonarqube started at $sonar_started"
+          [[ -n "$tests_done" && -n "$sonar_started" && ! "$sonar_started" < "$tests_done" ]] || status=1
+          exit "$status"
