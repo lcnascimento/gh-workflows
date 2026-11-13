@@ -1,0 +1,4 @@
+paths:
+  .github/workflows/ci.yml:
+    ignore:
+      - 'specifying action "\$/actions/[a-z-]+" in invalid format'
