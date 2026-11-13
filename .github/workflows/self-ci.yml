@@ -39,3 +39,9 @@ jobs:
       actions: read
       contents: read
     uses: ./.github/workflows/test-ci.yml
+
+  test-sonarqube:
+    permissions:
+      actions: read
+      contents: read
+    uses: ./.github/workflows/test-sonarqube.yml
