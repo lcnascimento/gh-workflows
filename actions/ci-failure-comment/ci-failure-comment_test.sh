@@ -148,6 +148,29 @@ run
 check "reports again on a new SHA" "$(posted 7)" "$expected_body"
 
 setup
+event '[{"number": 7}]'
+pr 7
+comments 7 "$(comment lcnascimento User $'> o CI falhou\n\n<!-- cyrus-ci-failure sha=abc123 -->')" \
+  "$(comment homelab-cyrus[bot] Bot $'<!-- cyrus-ci-failure sha=a -->\n<!-- cyrus-ci-failure limit -->')" \
+  "$(comment lcnascimento User '<!-- cyrus-ci-failure sha=b -->')" "$(comment lcnascimento User '<!-- cyrus-ci-failure sha=c -->')"
+run
+check "ignores markers quoted by humans or by the mentioned bot" "$(posted 7)" "$expected_body"
+
+setup
+event '[{"number": 7}]'
+pr 7
+comments 7 "$(relay_comment $'<!-- cyrus-ci-failure sha=abc123 -->\nquoted above')"
+run
+check "ignores a relay marker that does not end the comment" "$(posted 7)" "$expected_body"
+
+setup
+event '[{"number": 7}]'
+pr 7
+comments 7 "$(relay_comment $'x\n\n<!-- cyrus-ci-failure sha=abc123 -->\n')"
+run
+check "accepts a relay marker followed by a trailing newline" "$(posted 7)|$(cat "$work/out")" "|PR #7 already reported for abc123"
+
+setup
 event '[{"number": 7}]' success
 pr 7
 comments 7

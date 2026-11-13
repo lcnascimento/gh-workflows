@@ -51,7 +51,10 @@ marker_prefix="<!-- cyrus-ci-failure "
 marker="${marker_prefix}sha=$sha -->"
 limit_marker="${marker_prefix}limit -->"
 markers="$(gh api --paginate "repos/$REPO/issues/$pr/comments" |
-  jq -r --arg prefix "$marker_prefix" '.[].body | select(contains($prefix)) | match($prefix + "[^ ]* -->").string')"
+  jq -r --arg bot "$BOT" '
+    .[] | select(.user.type == "Bot" and .user.login != $bot)
+    | .body | sub("\\s+$"; "") | split("\n") | last
+    | select(test("^<!-- cyrus-ci-failure (sha=\\S+|limit) -->$"))')"
 
 if grep -qxF "$marker" <<<"$markers"; then
   echo "PR #$pr already reported for $sha"
