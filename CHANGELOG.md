@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.1.0](https://github.com/lcnascimento/gh-workflows/compare/v1.0.0...v1.1.0) (2026-11-13)
+
+
+### Features
+
+* **ci-failure-comment:** filter by author, list failed jobs and post a final notice at the limit ([b2c9310](https://github.com/lcnascimento/gh-workflows/commit/b2c93101c0fdb16cf2708b0a6fd6f12786e9ad15))
+* **relay:** add the reusable relay that wakes the Cyrus bot on CI failures ([fdfd2b2](https://github.com/lcnascimento/gh-workflows/commit/fdfd2b2366d09110b65585c7a5417d9db2e757b3))
+* **relay:** wake the Cyrus bot on CI failures and SonarQube gate failures ([0fab9cb](https://github.com/lcnascimento/gh-workflows/commit/0fab9cbcb2577bce1a446a5274dd20cbf1df5fbe))
+* **relay:** wake the Cyrus bot when the SonarQube Code Analysis check fails ([ede9b82](https://github.com/lcnascimento/gh-workflows/commit/ede9b820b9d44aa0ffa1d93351a8cf85add27f7f))
+
+
+### Bug Fixes
+
+* **ci-failure-comment:** count only markers that end a comment from a bot other than the mentioned one ([685dcd3](https://github.com/lcnascimento/gh-workflows/commit/685dcd360240d1f6771e812211f731f3ba2ab329))
+* **ci-failure-comment:** omit the failed jobs heading when no job failed ([98ec749](https://github.com/lcnascimento/gh-workflows/commit/98ec74974094823efc733d6be815ff4f50acade4))
+* **ci-failure-comment:** read the event from a path the step can set ([2c588ff](https://github.com/lcnascimento/gh-workflows/commit/2c588ff44124930387c329c073db8121a8d0ce98))
+* **relay:** pick the runner, enter only on failures and keep a unique concurrency group without a head SHA ([58e7026](https://github.com/lcnascimento/gh-workflows/commit/58e7026a601aad59054fa59d19a2af1fb05ccc5d))
+
 ## 1.0.0 (2026-11-13)
 
 
