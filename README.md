@@ -91,7 +91,7 @@ Lidas do repo ou da organização do caller:
 
 | Job | Roda quando | Permissões |
 |---|---|---|
-| `discover` | sempre | `contents: read` |
+| `discover` | sempre, no `ubuntu-latest` | `contents: read` |
 | `lint` | depois do `discover` | `contents: read` |
 | `test-unit` | depois do `discover` | `contents: read` |
 | `test-component`, `test-integration`, `test-e2e` | o target existe | `contents: read` |
@@ -186,7 +186,7 @@ O caller começa com `permissions: {}` no workflow e concede, no job que chama o
 
 ## Runner
 
-Todo reusável roda em `inputs.runner || vars.CI_RUNNER || 'ubuntu-latest'`. O repo escolhe o runner pela variável `CI_RUNNER`. Os exemplos têm um `workflow_dispatch` com input `runner` (default `ubuntu-latest`) para rodar a CI fora do cluster quando o runner do `homelab-prod` está fora do ar. No `pull_request` e no `push`, `inputs.runner` é vazio e vale o fallback.
+Todo reusável roda em `inputs.runner || vars.CI_RUNNER || 'ubuntu-latest'`. A exceção é o `discover` do `ci.yml`, que roda sempre no `ubuntu-latest`: ele só faz checkout e `make -n`, e num runner sob demanda atrasaria o início dos jobs seguintes. O repo escolhe o runner pela variável `CI_RUNNER`. Os exemplos têm um `workflow_dispatch` com input `runner` (default `ubuntu-latest`) para rodar a CI fora do cluster quando o runner do `homelab-prod` está fora do ar. No `pull_request` e no `push`, `inputs.runner` é vazio e vale o fallback.
 
 ## Exemplos de caller
 
