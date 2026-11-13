@@ -19,7 +19,7 @@ Os exemplos de caller ficam em [`examples/.github/workflows/`](examples/.github/
 Referencie todo componente pelo SHA do commit da release, com a tag num comentário:
 
 ```yaml
-uses: lcnascimento/gh-workflows/.github/workflows/ci.yml@<sha> # v1.1.0
+uses: lcnascimento/gh-workflows/.github/workflows/ci.yml@<sha> # v1.3.0
 ```
 
 As releases são imutáveis: a tag de uma versão publicada nunca muda de commit. O comentário `# vX.Y.Z` é o que o Renovate lê para propor a próxima versão e trocar o SHA. As actions que o `ci.yml` e o `sonarqube.yml` usam por dentro (`setup-runtime`, `sonar-args`, `lint-workflows`) vêm do mesmo SHA do workflow chamado.
