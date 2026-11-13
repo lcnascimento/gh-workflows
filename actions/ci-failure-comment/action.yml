@@ -1,15 +1,21 @@
 name: ci-failure-comment
-description: Mention a bot on the pull request whose CI failed, once per commit, from a workflow_run event
+description: Mention a bot on the pull request whose CI failed, once per commit and up to a limit per pull request, from a workflow_run event
 
 inputs:
   bot:
     description: Login of the bot to mention, e.g. homelab-cyrus[bot]
     required: true
+  author:
+    description: Only comment on pull requests opened by this login; empty accepts any author
+    default: ""
   max-attempts:
-    description: Maximum number of failure reports per pull request
+    description: Maximum number of failure reports per pull request, after which a final notice without mention is posted
     default: "3"
+  event-path:
+    description: Path of the workflow_run event payload
+    default: ${{ github.event_path }}
   token:
-    description: Token used to read pull requests and comment on them. The calling job must grant `pull-requests write`.
+    description: Token used to read pull requests and comment on them. The calling job must grant `pull-requests write`, and `actions read` to list the failed jobs.
     default: ${{ github.token }}
 
 runs:
@@ -18,7 +24,9 @@ runs:
     - shell: bash
       env:
         GH_TOKEN: ${{ inputs.token }}
+        GITHUB_EVENT_PATH: ${{ inputs.event-path }}
         REPO: ${{ github.repository }}
         BOT: ${{ inputs.bot }}
+        AUTHOR: ${{ inputs.author }}
         MAX_ATTEMPTS: ${{ inputs.max-attempts }}
       run: "$GITHUB_ACTION_PATH/ci-failure-comment.sh"
