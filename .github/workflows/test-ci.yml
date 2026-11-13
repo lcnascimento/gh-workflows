@@ -25,6 +25,7 @@ jobs:
     needs: [clean, runner-input]
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions: {}
     steps:
       - env:
           CI_RUNNER: ${{ vars.CI_RUNNER }}
