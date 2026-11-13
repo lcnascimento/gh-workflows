@@ -1,7 +1,7 @@
 name: ci-failure
 
 on:
-  workflow_run:
+  workflow_run: # zizmor: ignore[dangerous-triggers] reads only the run metadata, never checks out the PR code
     workflows: [ci]
     types: [completed]
 
