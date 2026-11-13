@@ -42,6 +42,12 @@ jobs:
       contents: read
     uses: ./.github/workflows/test-ci-failure-comment.yml
 
+  test-relay:
+    permissions:
+      actions: read
+      pull-requests: write
+    uses: ./.github/workflows/test-relay.yml
+
   test-renovate-preset:
     permissions:
       contents: read

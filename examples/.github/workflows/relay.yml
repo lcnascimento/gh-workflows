@@ -1,0 +1,20 @@
+name: relay
+
+on:
+  workflow_run: # zizmor: ignore[dangerous-triggers] the relay reads only run and PR metadata and never checks out code
+    workflows: [ci]
+    types: [completed]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.workflow_run.head_sha }}
+
+jobs:
+  relay:
+    permissions:
+      actions: read
+      pull-requests: write
+    uses: lcnascimento/gh-workflows/.github/workflows/relay.yml@1776da0b47b79308f2b407ce093328695882608b # v1.0.0
+    with:
+      bot-login: homelab-cyrus[bot]

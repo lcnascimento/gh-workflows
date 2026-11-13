@@ -5,3 +5,6 @@ paths:
   .github/workflows/sonarqube.yml:
     ignore:
       - 'specifying action "\$/actions/[a-z-]+" in invalid format'
+  .github/workflows/relay.yml:
+    ignore:
+      - 'specifying action "\$/actions/[a-z-]+" in invalid format'

@@ -1,0 +1,29 @@
+name: relay
+
+on:
+  workflow_call:
+    inputs:
+      bot-login:
+        description: Login of the bot whose pull requests are relayed, e.g. homelab-cyrus[bot]
+        type: string
+        required: true
+      max-iterations:
+        description: Maximum number of automatic reports per pull request
+        type: number
+        default: 3
+
+permissions: {}
+
+jobs:
+  relay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      pull-requests: write
+    steps:
+      - uses: $/actions/ci-failure-comment
+        with:
+          bot: ${{ inputs.bot-login }}
+          author: ${{ inputs.bot-login }}
+          max-attempts: ${{ inputs.max-iterations }}
