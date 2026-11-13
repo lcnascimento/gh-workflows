@@ -6,14 +6,21 @@ set -euo pipefail
 sonar_check="SonarQube Code Analysis"
 
 IFS=$'\x1f' read -r kind name id conclusion sha run_url pr < <(
-  jq -r '(if has("check_run") then "check_run" else "workflow_run" end) as $kind | .[$kind]
-    | [$kind, .name, .id, .conclusion, .head_sha, .html_url, .pull_requests[0].number] | map(. // "" | tostring) | join("\u001f")' \
+  jq -r 'if has("review") then ["review", "", .review.id, "", .pull_request.head.sha, .review.html_url, .pull_request.number]
+    else (if has("check_run") then "check_run" else "workflow_run" end) as $kind | .[$kind]
+      | [$kind, .name, .id, .conclusion, .head_sha, .html_url, .pull_requests[0].number] end
+    | map(. // "" | tostring) | join("\u001f")' \
     "$EVENT_PATH"
 )
 
 post_comment() { gh api -X POST "repos/$REPO/issues/$pr/comments" -f body="$1" >/dev/null; }
 
-if [[ "$kind" == check_run ]]; then
+if [[ "$kind" == review ]]; then
+  if [[ -z "${REVIEWER:-}" ]]; then
+    echo "review $id ignored without a reviewer login"
+    exit 0
+  fi
+elif [[ "$kind" == check_run ]]; then
   label="check run"
   if [[ "$name" != "$sonar_check" ]]; then
     echo "check run $name is not $sonar_check"
@@ -22,7 +29,7 @@ if [[ "$kind" == check_run ]]; then
 else
   label=run
 fi
-if [[ "$conclusion" != failure ]]; then
+if [[ "$kind" != review && "$conclusion" != failure ]]; then
   echo "$label $id concluded $conclusion"
   exit 0
 fi
@@ -49,6 +56,32 @@ if [[ -n "${AUTHOR:-}" && "$author" != "$AUTHOR" ]]; then
   exit 0
 fi
 
+if [[ "$kind" == review ]]; then
+  open_threads="$(gh api graphql -F number="$pr" -f owner="${REPO%/*}" -f name="${REPO#*/}" -f query='
+    query($owner: String!, $name: String!, $number: Int!) {
+      repository(owner: $owner, name: $name) {
+        pullRequest(number: $number) {
+          reviewThreads(first: 100) {
+            nodes {
+              isResolved
+              opener: comments(first: 1) { nodes { author { login } } }
+              latest: comments(last: 1) { nodes { author { login } } }
+            }
+          }
+        }
+      }
+    }' | jq --arg reviewer "${REVIEWER%\[bot\]}" --arg bot "${BOT%\[bot\]}" '
+      [.data.repository.pullRequest.reviewThreads.nodes[]
+        | select((.isResolved | not)
+          and .opener.nodes[0].author.login == $reviewer
+          and .latest.nodes[0].author.login != $bot)]
+      | length')"
+  if ((open_threads == 0)); then
+    echo "PR #$pr has no open threads of $REVIEWER"
+    exit 0
+  fi
+fi
+
 marker_prefix="<!-- cyrus-ci-failure "
 marker="${marker_prefix}sha=$sha -->"
 limit_marker="${marker_prefix}limit -->"
@@ -71,6 +104,14 @@ if (($(grep -c "^${marker_prefix}sha=" <<<"$markers" || true) >= MAX_ATTEMPTS));
 
 $limit_marker"
   echo "PR #$pr reached $MAX_ATTEMPTS CI failure reports"
+  exit 0
+fi
+
+if [[ "$kind" == review ]]; then
+  post_comment "@$BOT o Revisor deixou $open_threads threads abertas no commit $sha: $run_url
+
+$marker"
+  echo "reported $sha on PR #$pr"
   exit 0
 fi
 
