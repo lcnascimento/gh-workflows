@@ -5,25 +5,27 @@ set -euo pipefail
 
 sonar_check="SonarQube Code Analysis"
 
-if jq -e 'has("check_run")' "$GITHUB_EVENT_PATH" >/dev/null; then
-  source=check_run label="check run"
-  name="$(jq -r '.check_run.name' "$GITHUB_EVENT_PATH")"
+IFS=$'\x1f' read -r kind name id conclusion sha run_url pr < <(
+  jq -r '(if has("check_run") then "check_run" else "workflow_run" end) as $kind | .[$kind]
+    | [$kind, .name, .id, .conclusion, .head_sha, .html_url, .pull_requests[0].number] | map(. // "" | tostring) | join("\u001f")' \
+    "$GITHUB_EVENT_PATH"
+)
+
+post_comment() { gh api -X POST "repos/$REPO/issues/$pr/comments" -f body="$1" >/dev/null; }
+
+if [[ "$kind" == check_run ]]; then
+  label="check run"
   if [[ "$name" != "$sonar_check" ]]; then
     echo "check run $name is not $sonar_check"
     exit 0
   fi
 else
-  source=workflow_run label=run
+  label=run
 fi
-id="$(jq -r --arg s "$source" '.[$s].id' "$GITHUB_EVENT_PATH")"
-conclusion="$(jq -r --arg s "$source" '.[$s].conclusion' "$GITHUB_EVENT_PATH")"
 if [[ "$conclusion" != failure ]]; then
   echo "$label $id concluded $conclusion"
   exit 0
 fi
-sha="$(jq -r --arg s "$source" '.[$s].head_sha' "$GITHUB_EVENT_PATH")"
-run_url="$(jq -r --arg s "$source" '.[$s].html_url' "$GITHUB_EVENT_PATH")"
-pr="$(jq -r --arg s "$source" '.[$s].pull_requests[0].number // empty' "$GITHUB_EVENT_PATH")"
 
 if [[ -n "$pr" ]]; then
   pull="$(gh api "repos/$REPO/pulls/$pr")"
@@ -51,7 +53,10 @@ marker_prefix="<!-- cyrus-ci-failure "
 marker="${marker_prefix}sha=$sha -->"
 limit_marker="${marker_prefix}limit -->"
 markers="$(gh api --paginate "repos/$REPO/issues/$pr/comments" |
-  jq -r --arg prefix "$marker_prefix" '.[].body | select(contains($prefix)) | match($prefix + "[^ ]* -->").string')"
+  jq -r --arg bot "$BOT" '
+    .[] | select(.user.type == "Bot" and .user.login != $bot)
+    | .body | sub("\\s+$"; "") | split("\n") | last
+    | select(test("^<!-- cyrus-ci-failure (sha=\\S+|limit) -->$"))')"
 
 if grep -qxF "$marker" <<<"$markers"; then
   echo "PR #$pr already reported for $sha"
@@ -62,36 +67,39 @@ if grep -qxF "$limit_marker" <<<"$markers"; then
   exit 0
 fi
 if (($(grep -c "^${marker_prefix}sha=" <<<"$markers" || true) >= MAX_ATTEMPTS)); then
-  gh api -X POST "repos/$REPO/issues/$pr/comments" -f body="O relay parou depois de $MAX_ATTEMPTS relatos de falha neste PR. A falha do commit $sha ($run_url) precisa de um humano.
+  post_comment "O relay parou depois de $MAX_ATTEMPTS relatos de falha neste PR. A falha do commit $sha ($run_url) precisa de um humano.
 
-$limit_marker" >/dev/null
+$limit_marker"
   echo "PR #$pr reached $MAX_ATTEMPTS CI failure reports"
   exit 0
 fi
 
-if [[ "$source" == check_run ]]; then
-  gh api -X POST "repos/$REPO/issues/$pr/comments" -f body="@$BOT o SonarQube reprovou o commit $sha: $run_url
+if [[ "$kind" == check_run ]]; then
+  post_comment "@$BOT o SonarQube reprovou o commit $sha: $run_url
 
 Investigue os problemas apontados e envie uma correção para este PR.
 
-$marker" >/dev/null
+$marker"
   echo "reported $sha on PR #$pr"
   exit 0
 fi
 
 jobs_section=""
 if jobs="$(gh api --paginate "repos/$REPO/actions/runs/$id/jobs?per_page=100")"; then
-  jobs_section="Jobs que falharam:
-$(jq -r '.jobs[] | select(.conclusion == "failure") | "- " + .name' <<<"$jobs")
+  failed="$(jq -r '.jobs[] | select(.conclusion == "failure") | "- " + .name' <<<"$jobs")"
+  if [[ -n "$failed" ]]; then
+    jobs_section="Jobs que falharam:
+$failed
 
 "
+  fi
 else
   echo "::warning::could not list the jobs of run $id; grant actions: read to include them"
 fi
 
-gh api -X POST "repos/$REPO/issues/$pr/comments" -f body="@$BOT o CI falhou no commit $sha: $run_url
+post_comment "@$BOT o CI falhou no commit $sha: $run_url
 
 ${jobs_section}Investigue a falha e envie uma correção para este PR.
 
-$marker" >/dev/null
+$marker"
 echo "reported $sha on PR #$pr"
