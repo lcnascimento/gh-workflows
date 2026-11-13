@@ -1,0 +1,61 @@
+name: test-ci-failures
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [labeled]
+
+permissions: {}
+
+jobs:
+  dirty-format:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'test-ci-failures'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+    with:
+      working-directory: testdata/ci/dirty-format
+
+  red-test:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'test-ci-failures'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+    with:
+      working-directory: testdata/ci/red-test
+
+  invalid-workflow:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'test-ci-failures'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+    with:
+      working-directory: testdata/ci/invalid-workflow
+
+  assert:
+    needs: [dirty-format, red-test, invalid-workflow]
+    if: always() && (github.event_name == 'workflow_dispatch' || github.event.label.name == 'test-ci-failures')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}/jobs
+        run: |
+          jobs=$(gh api --paginate "$RUN" --jq '.jobs[] | {name, conclusion, failed: ([.steps[] | select(.conclusion == "failure") | .name] | join(","))}' | jq -s .)
+          status=0
+          while IFS='|' read -r name conclusion failed; do
+            got=$(jq -r --arg n "$name" '.[] | select(.name == $n) | "\(.conclusion)|\(.failed)"' <<<"$jobs")
+            echo "$name: want $conclusion|$failed got $got"
+            [[ "$got" == "$conclusion|$failed" ]] || status=1
+          done <<'EXPECT'
+          dirty-format / lint|failure|git diff
+          dirty-format / test-unit|success|
+          red-test / lint|success|
+          red-test / test-unit|failure|make test.unit
+          invalid-workflow / lint|failure|lint-workflows
+          invalid-workflow / test-unit|success|
+          EXPECT
+          exit "$status"

@@ -48,10 +48,14 @@ jobs:
         with:
           working-directory: ${{ inputs.working-directory }}
       - run: make setup
-      - run: make lint
-      - run: make format
-      - run: git diff --exit-code -- .
-      - uses: $/actions/lint-workflows
+      - name: make lint
+        run: make lint
+      - name: make format
+        run: make format
+      - name: git diff
+        run: git diff --exit-code -- .
+      - name: lint-workflows
+        uses: $/actions/lint-workflows
         with:
           path: ${{ inputs.working-directory }}/.github/workflows
 
@@ -72,4 +76,5 @@ jobs:
         with:
           working-directory: ${{ inputs.working-directory }}
       - run: make setup
-      - run: make test.unit
+      - name: make test.unit
+        run: make test.unit
