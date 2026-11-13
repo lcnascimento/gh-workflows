@@ -17,6 +17,7 @@ while (($#)); do
     api | --paginate) ;;
     -X) method="$2"; shift ;;
     -f) body="${2#body=}"; shift ;;
+    -F) shift ;;
     *) args+=("$1") ;;
   esac
   shift
@@ -44,6 +45,19 @@ check_event() {
 {"check_run": {"id": 77, "name": "${3:-SonarQube Code Analysis}", "conclusion": "${2:-failure}", "head_sha": "abc123", "html_url": "https://github.com/o/r/runs/77", "pull_requests": $1}}
 JSON
 }
+
+review_event() {
+  cat >"$work/event.json" <<JSON
+{"review": {"id": 99, "state": "COMMENTED", "commit_id": "old456", "html_url": "https://github.com/o/r/pull/7#pullrequestreview-99", "user": {"login": "greptile-apps[bot]"}}, "pull_request": {"number": 7, "head": {"sha": "abc123"}}}
+JSON
+}
+
+thread() {
+  jq -nc --argjson resolved "$1" --arg opener "$2" --arg latest "$3" \
+    '{isResolved: $resolved, opener: {nodes: [{author: {login: $opener}}]}, latest: {nodes: [{author: {login: $latest}}]}}'
+}
+
+threads() { api graphql "{\"data\": {\"repository\": {\"pullRequest\": {\"reviewThreads\": {\"nodes\": [$(IFS=,; echo "$*")]}}}}}"; }
 
 pull() {
   jq -nc --argjson n "$1" --arg login "${2:-homelab-cyrus[bot]}" --arg state "${3:-open}" --arg sha "${4:-abc123}" \
@@ -73,7 +87,7 @@ api() { printf '%s' "$2" >"$work/api/${1//[\/?&=]/_}.json"; }
 
 run() {
   GH_STUB_DIR="$work" PATH="$work/bin:$PATH" EVENT_PATH="$work/event.json" \
-    REPO=o/r BOT=homelab-cyrus[bot] AUTHOR="${AUTHOR-homelab-cyrus[bot]}" MAX_ATTEMPTS=3 "$script" >"$work/out" 2>&1 || echo "exit $?" >>"$work/out"
+    REPO=o/r BOT=homelab-cyrus[bot] AUTHOR="${AUTHOR-homelab-cyrus[bot]}" REVIEWER="${REVIEWER-greptile-apps[bot]}" MAX_ATTEMPTS=3 "$script" >"$work/out" 2>&1 || echo "exit $?" >>"$work/out"
 }
 
 posted() { cat "$work/posted-repos_o_r_issues_$1_comments" 2>/dev/null || true; }
@@ -301,5 +315,103 @@ run
 check "counts Sonar failures against the same limit" "$(posted 7)|$(cat "$work/out")" "O relay parou depois de 3 relatos de falha neste PR. A falha do commit abc123 (https://github.com/o/r/runs/77) precisa de um humano.
 
 <!-- cyrus-ci-failure limit -->|PR #7 reached 3 CI failure reports"
+
+review_body='@homelab-cyrus[bot] o Revisor deixou 2 threads abertas no commit abc123: https://github.com/o/r/pull/7#pullrequestreview-99
+
+<!-- cyrus-ci-failure sha=abc123 -->'
+
+setup
+review_event
+pr 7
+comments 7
+threads "$(thread false greptile-apps greptile-apps)" "$(thread false greptile-apps lcnascimento)" "$(thread true greptile-apps greptile-apps)"
+run
+check "wakes the bot on open threads of the reviewer" "$(posted 7)" "$review_body"
+
+setup
+review_event
+pr 7
+comments 7
+threads "$(thread false greptile-apps greptile-apps)" "$(thread false greptile-apps lcnascimento)"
+REVIEWER='Greptile-Apps[bot]' run
+check "matches the reviewer login case-insensitively" "$(posted 7)" "$review_body"
+
+setup
+review_event
+pr 7
+comments 7
+ghost='{"isResolved": false, "opener": {"nodes": [{"author": null}]}, "latest": {"nodes": [{"author": null}]}}'
+answered_by_ghost='{"isResolved": false, "opener": {"nodes": [{"author": {"login": "greptile-apps"}}]}, "latest": {"nodes": [{"author": null}]}}'
+threads "$ghost" "$answered_by_ghost" "$(thread false greptile-apps greptile-apps)"
+run
+check "counts threads with a deleted author" "$(posted 7)" "$review_body"
+
+setup
+review_event
+pr 7
+comments 7
+threads "$(thread true greptile-apps greptile-apps)"
+run
+check "skips a review without open threads" "$(posted 7)|$(cat "$work/out")" "|PR #7 has no open threads of greptile-apps[bot]"
+
+setup
+review_event
+pr 7
+comments 7
+threads "$(thread false greptile-apps homelab-cyrus)"
+run
+check "skips a thread last answered by the bot" "$(posted 7)|$(cat "$work/out")" "|PR #7 has no open threads of greptile-apps[bot]"
+
+setup
+review_event
+pr 7
+comments 7
+threads "$(thread false lcnascimento lcnascimento)"
+run
+check "skips a thread opened by another author" "$(posted 7)|$(cat "$work/out")" "|PR #7 has no open threads of greptile-apps[bot]"
+
+setup
+review_event
+pr 7
+comments 7
+threads "$(thread false greptile-apps greptile-apps)"
+REVIEWER='' run
+check "ignores a review without a reviewer login" "$(posted 7)|$(cat "$work/out")" "|review 99 ignored without a reviewer login"
+
+setup
+review_event
+pr 7 lcnascimento
+comments 7
+threads "$(thread false greptile-apps greptile-apps)"
+run
+check "skips a review on a PR of another author" "$(posted 7)|$(cat "$work/out")" "|PR #7 is by lcnascimento, not homelab-cyrus[bot]"
+
+setup
+review_event
+pr 7
+comments 7 "$(relay_comment "$expected_body")"
+threads "$(thread false greptile-apps greptile-apps)"
+run
+check "skips a review on a SHA already reported by CI" "$(posted 7)|$(cat "$work/out")" "|PR #7 already reported for abc123"
+
+setup
+review_event
+pr 7
+three_reports
+threads "$(thread false greptile-apps greptile-apps)"
+run
+check "counts reviews against the same limit" "$(posted 7)|$(cat "$work/out")" "O relay parou depois de 3 relatos de falha neste PR. A falha do commit abc123 (https://github.com/o/r/pull/7#pullrequestreview-99) precisa de um humano.
+
+<!-- cyrus-ci-failure limit -->|PR #7 reached 3 CI failure reports"
+
+setup
+review_event
+pr 7
+comments 7 "$(relay_comment '<!-- cyrus-ci-failure sha=old456 -->')"
+threads "$(thread false greptile-apps greptile-apps)"
+run
+check "marks a review of an old commit with the current head" "$(posted 7)" '@homelab-cyrus[bot] o Revisor deixou 1 threads abertas no commit abc123: https://github.com/o/r/pull/7#pullrequestreview-99
+
+<!-- cyrus-ci-failure sha=abc123 -->'
 
 exit "$failures"

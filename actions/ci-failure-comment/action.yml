@@ -1,5 +1,5 @@
 name: ci-failure-comment
-description: Mention a bot on the pull request whose CI failed or whose SonarQube Code Analysis check failed, once per commit and up to a limit per pull request, from a workflow_run or check_run event
+description: Mention a bot on the pull request whose CI failed, whose SonarQube Code Analysis check failed or whose reviewer left open threads, once per commit and up to a limit per pull request, from a workflow_run, check_run or pull_request_review event
 
 inputs:
   bot:
@@ -8,11 +8,14 @@ inputs:
   author:
     description: Only comment on pull requests opened by this login; empty accepts any author
     default: ""
+  reviewer:
+    description: Login of the automatic reviewer, e.g. greptile-apps[bot], whose open threads wake the bot on a pull_request_review event; empty ignores reviews
+    default: ""
   max-attempts:
     description: Maximum number of failure reports per pull request, after which a final notice without mention is posted
     default: "3"
   event-path:
-    description: Path of the workflow_run or check_run event payload
+    description: Path of the workflow_run, check_run or pull_request_review event payload
     default: ${{ github.event_path }}
   token:
     description: Token used to read pull requests and comment on them. The calling job must grant `pull-requests write`, and `actions read` to list the failed jobs.
@@ -28,5 +31,6 @@ runs:
         REPO: ${{ github.repository }}
         BOT: ${{ inputs.bot }}
         AUTHOR: ${{ inputs.author }}
+        REVIEWER: ${{ inputs.reviewer }}
         MAX_ATTEMPTS: ${{ inputs.max-attempts }}
       run: "$GITHUB_ACTION_PATH/ci-failure-comment.sh"
