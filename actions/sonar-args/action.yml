@@ -22,6 +22,9 @@ outputs:
   args:
     description: Arguments for the scanner
     value: ${{ steps.args.outputs.args }}
+  project-key:
+    description: Resolved Sonar project key
+    value: ${{ steps.args.outputs.project-key }}
 
 runs:
   using: composite
@@ -40,7 +43,9 @@ runs:
         DEFAULT_BRANCH: ${{ inputs.default-branch }}
         COVERAGE_ARTIFACT: ${{ inputs.coverage-artifact }}
       run: |
-        args=(-Dsonar.projectKey="${PROJECT_KEY:-${GITHUB_REPOSITORY#*/}}")
+        project_key="${PROJECT_KEY:-${GITHUB_REPOSITORY#*/}}"
+        echo "project-key=$project_key" >> "$GITHUB_OUTPUT"
+        args=(-Dsonar.projectKey="$project_key")
         if [[ -n "$PULL_REQUEST_SHA" ]]; then
           args+=(-Dsonar.scm.revision="$PULL_REQUEST_SHA")
         elif [[ "$REF_NAME" == "$DEFAULT_BRANCH" ]]; then
