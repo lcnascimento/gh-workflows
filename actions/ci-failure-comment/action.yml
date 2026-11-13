@@ -24,7 +24,7 @@ runs:
     - shell: bash
       env:
         GH_TOKEN: ${{ inputs.token }}
-        GITHUB_EVENT_PATH: ${{ inputs.event-path }}
+        EVENT_PATH: ${{ inputs.event-path }}
         REPO: ${{ github.repository }}
         BOT: ${{ inputs.bot }}
         AUTHOR: ${{ inputs.author }}
