@@ -1,0 +1,4 @@
+.github/workflows/ci.yml github-actions lcnascimento/gh-workflows v1.0.0
+Makefile regex golangci/golangci-lint 2.1.0
+Makefile regex gotest.tools/gotestsum 1.12.0
+Makefile regex prettier 3.5.0

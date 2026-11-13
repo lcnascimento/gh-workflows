@@ -28,3 +28,8 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/test-ci-failure-comment.yml
+
+  test-renovate-preset:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/test-renovate-preset.yml

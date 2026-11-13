@@ -1,0 +1,82 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":separateMultipleMajorReleases"
+  ],
+  "labels": [
+    "dependencies"
+  ],
+  "timezone": "America/Sao_Paulo",
+  "schedule": [
+    "before 8am on monday"
+  ],
+  "dependencyDashboardApproval": false,
+  "registryAliases": {
+    "harbor.luisnascimento.cloud/dockerhub": "docker.io",
+    "harbor.luisnascimento.cloud/dockerhub/library": "docker.io/library",
+    "harbor.luisnascimento.cloud/ghcr": "ghcr.io",
+    "harbor.luisnascimento.cloud/gcr": "gcr.io"
+  },
+  "packageRules": [
+    {
+      "description": "Group all Docker image updates",
+      "matchDatasources": [
+        "docker"
+      ],
+      "groupName": "docker images"
+    },
+    {
+      "description": "Group Terraform provider updates",
+      "matchDatasources": [
+        "terraform-provider"
+      ],
+      "groupName": "terraform providers"
+    },
+    {
+      "description": "Group the gh-workflows updates and automerge them once the CI is green",
+      "matchPackageNames": [
+        "lcnascimento/gh-workflows"
+      ],
+      "groupName": "gh-workflows",
+      "automerge": true
+    },
+    {
+      "description": "A gh-workflows major breaks the contract: merge it by hand",
+      "matchPackageNames": [
+        "lcnascimento/gh-workflows"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "automerge": false
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Versions annotated with a renovate comment in the Dockerfiles, the workflows and the composite actions",
+      "managerFilePatterns": [
+        "/(^|/)Dockerfile[^/]*$/",
+        "/^\\.github/workflows/.+\\.ya?ml$/",
+        "/(^|/)action\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\n\\s*(?:ARG )?\\w+[=:] ?(?<currentValue>\\S+)"
+      ],
+      "extractVersionTemplate": "^v?(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Tool versions annotated with a renovate comment in the Makefile, pinned by the setup target",
+      "managerFilePatterns": [
+        "/(^|/)Makefile$/",
+        "/\\.mk$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\n\\s*\\w+\\s*[:?]?=\\s*(?<currentValue>\\S+)"
+      ],
+      "extractVersionTemplate": "^v?(?<version>.+)$"
+    }
+  ]
+}
