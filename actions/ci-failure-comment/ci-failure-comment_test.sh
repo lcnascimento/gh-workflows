@@ -332,6 +332,14 @@ setup
 review_event
 pr 7
 comments 7
+threads "$(thread false greptile-apps greptile-apps)" "$(thread false greptile-apps lcnascimento)"
+REVIEWER='Greptile-Apps[bot]' run
+check "matches the reviewer login case-insensitively" "$(posted 7)" "$review_body"
+
+setup
+review_event
+pr 7
+comments 7
 threads "$(thread true greptile-apps greptile-apps)"
 run
 check "skips a review without open threads" "$(posted 7)|$(cat "$work/out")" "|PR #7 has no open threads of greptile-apps[bot]"

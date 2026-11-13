@@ -41,5 +41,5 @@ jobs:
         with:
           bot: ${{ inputs.bot-login }}
           author: ${{ inputs.bot-login }}
-          reviewer-login: ${{ inputs.reviewer-login }}
+          reviewer: ${{ inputs.reviewer-login }}
           max-attempts: ${{ inputs.max-iterations }}
