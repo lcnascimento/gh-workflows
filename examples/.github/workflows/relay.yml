@@ -6,6 +6,8 @@ on:
     types: [completed]
   check_run: # zizmor: ignore[dangerous-triggers] the relay reads only check and PR metadata and never checks out code
     types: [completed]
+  pull_request_review:
+    types: [submitted]
 
 permissions: {}
 
@@ -17,3 +19,4 @@ jobs:
     uses: lcnascimento/gh-workflows/.github/workflows/relay.yml@5e115b1da30b70099a34a0f78850bf100a031043 # v1.1.0
     with:
       bot-login: homelab-cyrus[bot]
+      reviewer-login: greptile-apps[bot]
