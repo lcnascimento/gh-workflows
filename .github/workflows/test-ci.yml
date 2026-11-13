@@ -36,3 +36,51 @@ jobs:
           echo "vars.CI_RUNNER='$CI_RUNNER' no-input=$FROM_VARS input=$FROM_INPUT"
           test "$FROM_VARS" = "$expected"
           test "$FROM_INPUT" = ubuntu-24.04-arm
+
+  typescript:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+    with:
+      working-directory: testdata/ci/typescript
+
+  python:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+    with:
+      working-directory: testdata/ci/python
+
+  hcl:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+    with:
+      working-directory: testdata/ci/hcl
+
+  no-manifest:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+    with:
+      working-directory: testdata/ci/no-manifest
+
+  setup-runtime-no-manifest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: runtime
+        uses: ./actions/setup-runtime
+        with:
+          working-directory: testdata/ci/no-manifest
+      - env:
+          INSTALLED: ${{ toJSON(steps.runtime.outputs) }}
+        run: |
+          echo "$INSTALLED"
+          test "$(jq -c . <<< "$INSTALLED")" = '{"go":"false","node":"false","python":"false","opentofu":"false"}'
+          ! command -v tofu
