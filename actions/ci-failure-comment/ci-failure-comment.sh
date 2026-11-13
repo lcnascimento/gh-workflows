@@ -81,10 +81,13 @@ fi
 
 jobs_section=""
 if jobs="$(gh api --paginate "repos/$REPO/actions/runs/$id/jobs?per_page=100")"; then
-  jobs_section="Jobs que falharam:
-$(jq -r '.jobs[] | select(.conclusion == "failure") | "- " + .name' <<<"$jobs")
+  failed="$(jq -r '.jobs[] | select(.conclusion == "failure") | "- " + .name' <<<"$jobs")"
+  if [[ -n "$failed" ]]; then
+    jobs_section="Jobs que falharam:
+$failed
 
 "
+  fi
 else
   echo "::warning::could not list the jobs of run $id; grant actions: read to include them"
 fi

@@ -172,6 +172,18 @@ Investigue a falha e envie uma correção para este PR.
 
 <!-- cyrus-ci-failure sha=abc123 -->'
 
+setup
+event '[{"number": 7}]'
+api 'repos/o/r/actions/runs/42/jobs?per_page=100' '{"jobs": [{"name": "lint", "conclusion": "success"}]}'
+pr 7
+api repos/o/r/issues/7/comments '[]'
+run
+check "omits the job list when no job failed" "$(posted 7)" '@homelab-cyrus[bot] o CI falhou no commit abc123: https://github.com/o/r/actions/runs/42
+
+Investigue a falha e envie uma correção para este PR.
+
+<!-- cyrus-ci-failure sha=abc123 -->'
+
 sonar_body='@homelab-cyrus[bot] o SonarQube reprovou o commit abc123: https://github.com/o/r/runs/77
 
 Investigue os problemas apontados e envie uma correção para este PR.
