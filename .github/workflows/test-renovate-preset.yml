@@ -1,0 +1,121 @@
+name: test-renovate-preset
+
+on:
+  workflow_call:
+
+permissions: {}
+
+env:
+  # renovate: datasource=npm depName=renovate
+  RENOVATE_VERSION: 44.198.3
+  FIXTURES: testdata/renovate-preset
+
+jobs:
+  validate:
+    name: validate ${{ matrix.files }} -> ${{ matrix.expect }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - files: default.json renovate.json
+            expect: success
+          - files: testdata/renovate-preset/invalid/renovate.json
+            expect: failure
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - id: validate
+        continue-on-error: true
+        env:
+          FILES: ${{ matrix.files }}
+        run: |
+          read -ra files <<<"$FILES"
+          npx --yes --package "renovate@$RENOVATE_VERSION" renovate-config-validator --strict "${files[@]}"
+      - name: Assert outcome
+        env:
+          OUTCOME: ${{ steps.validate.outcome }}
+          EXPECT: ${{ matrix.expect }}
+        run: |
+          echo "outcome=$OUTCOME expect=$EXPECT"
+          test "$OUTCOME" = "$EXPECT"
+
+  extract-consumer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - run: '"$FIXTURES/renovate-dry-run.sh" extract default.json "$FIXTURES/consumer" > "$RUNNER_TEMP/log.json"'
+      - name: Assert the Makefile and gh-workflows deps are extracted
+        run: |
+          jq -r 'select(.msg == "Extracted dependencies") | .packageFiles | to_entries[] | .key as $m
+            | .value[] | .packageFile as $f | .deps[] | "\($f) \($m) \(.depName) \(.currentValue)"' \
+            "$RUNNER_TEMP/log.json" | sort > "$RUNNER_TEMP/actual"
+          diff -u "$FIXTURES/consumer.expected" "$RUNNER_TEMP/actual"
+
+  extract-repo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Resolve the local preset of renovate.json to default.json, which the local platform cannot fetch
+        run: |
+          jq 'del(.extends)' renovate.json > "$RUNNER_TEMP/renovate.json"
+          mv "$RUNNER_TEMP/renovate.json" renovate.json
+      - run: '"$FIXTURES/renovate-dry-run.sh" extract default.json . > "$RUNNER_TEMP/log.json"'
+      - name: Assert every renovate comment of the repo is extracted
+        run: |
+          git grep -nE '# renovate: datasource=[^ ]+ depName=' -- . ':!testdata' ':!*.md' ':!default.json' \
+            | sed -E 's/^([^:]+):[0-9]+:.*depName=([^ ]+).*/\1 \2/' | sort > "$RUNNER_TEMP/expected"
+          jq -r 'select(.msg == "Extracted dependencies") | .packageFiles.regex[]?
+            | .packageFile as $f | .deps[] | "\($f) \(.depName)"' \
+            "$RUNNER_TEMP/log.json" | sort > "$RUNNER_TEMP/actual"
+          cat "$RUNNER_TEMP/expected"
+          grep -qx 'actions/lint-workflows/action.yml zizmor' "$RUNNER_TEMP/expected"
+          diff -u "$RUNNER_TEMP/expected" "$RUNNER_TEMP/actual"
+
+  group-gh-workflows:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Point the gh-workflows rules at actions/checkout, which has releases to look up
+        run: sed 's#"lcnascimento/gh-workflows"#"actions/checkout"#' default.json > "$RUNNER_TEMP/stand-in.json"
+      - env:
+          GITHUB_COM_TOKEN: ${{ github.token }}
+          LOG_LEVEL: trace
+        run: '"$FIXTURES/renovate-dry-run.sh" lookup "$RUNNER_TEMP/stand-in.json" "$FIXTURES/stand-in" > "$RUNNER_TEMP/log.json"'
+      - name: Assert minor is grouped with automerge and major is grouped without
+        run: |
+          jq -r 'select(.msg == "branches") | .branches[] | .branchName as $b | .automerge as $a
+            | .upgrades[] | "\(.updateType) \($b | sub("major-[0-9]+-"; "major-N-")) \($a)"' \
+            "$RUNNER_TEMP/log.json" | sort -u > "$RUNNER_TEMP/actual"
+          diff -u "$FIXTURES/stand-in.expected" "$RUNNER_TEMP/actual"

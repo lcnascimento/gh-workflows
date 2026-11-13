@@ -1,0 +1,12 @@
+name: ci
+
+on:
+  pull_request:
+
+permissions: {}
+
+jobs:
+  ci:
+    permissions:
+      contents: read
+    uses: lcnascimento/gh-workflows/.github/workflows/ci.yml@9a1af07ba72dbb9824afe3f5efa9c5217683abcf # v1.0.0
