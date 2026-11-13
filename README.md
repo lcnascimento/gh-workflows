@@ -121,6 +121,7 @@ O relay acorda o Cyrus quando a CI do Consumidor falha ou quando o check run "So
 
 | Input | Tipo | Default | Descrição |
 |---|---|---|---|
+| `runner` | string | `''` | Label do runner, com o mesmo fallback do `ci.yml`. |
 | `bot-login` | string | obrigatório | Login do bot, ex.: `homelab-cyrus[bot]`. O relay só age em PRs com esse autor e menciona esse login. |
 | `max-iterations` | number | `3` | Máximo de relatos automáticos por PR. |
 
@@ -135,11 +136,11 @@ A cada `workflow_run` ou `check_run`, o relay:
 5. ao atingir `max-iterations` relatos, posta um aviso final sem menção, uma vez só, e depois não comenta mais;
 6. senão, comenta mencionando o bot, com o link da run e os jobs que falharam, ou com o link do check do Sonar.
 
-A falha da CI e a reprovação do Sonar dividem o marcador e o contador: no mesmo SHA, o bot recebe um comentário só, e ele conta uma iteração. A contagem sai dos comentários do PR, sem estado externo. Cada relato leva o marcador invisível `<!-- cyrus-ci-failure sha=<sha> -->`, e o aviso final leva `<!-- cyrus-ci-failure limit -->`.
+A falha da CI e a reprovação do Sonar dividem o marcador e o contador: no mesmo SHA, o bot recebe um comentário só, e ele conta uma iteração. A contagem sai dos comentários do PR, sem estado externo. Cada relato leva o marcador invisível `<!-- cyrus-ci-failure sha=<sha> -->` na última linha, e o aviso final leva `<!-- cyrus-ci-failure limit -->`. Só conta o marcador que fecha um comentário de um autor do tipo `Bot` diferente de `bot-login`, como o `github-actions[bot]` do `GITHUB_TOKEN`. Um humano ou o próprio Cyrus que cite um relato não muda a contagem.
 
 O reusável não faz checkout: o script vem da action no SHA do reusável, e nenhum código do PR roda no gatilho privilegiado. Por isso o `workflow_run` e o `check_run` do caller levam um `# zizmor: ignore[dangerous-triggers]`.
 
-O job do reusável só roda num `check_run` do Sonar que reprovou, e define a própria `concurrency` por head SHA. Assim os eventos da CI e do Sonar do mesmo commit rodam em série, sem comentário duplicado, e os check runs de outros nomes não ocupam a fila. O caller não precisa de `concurrency`.
+O `if` do job pré-filtra os eventos para não gastar runner: só entra num `workflow_run` que falhou ou num `check_run` do Sonar que reprovou. Outros eventos, como um `workflow_dispatch`, passam e a action os ignora. O job define a própria `concurrency` por head SHA, e cai no `run_id` quando o evento não tem head SHA. Assim os eventos da CI e do Sonar do mesmo commit rodam em série, sem comentário duplicado, e as runs verdes e os check runs de outros nomes não ocupam a fila nem substituem um relato pendente. O caller não precisa de `concurrency`.
 
 | Job | Permissões |
 |---|---|
@@ -159,7 +160,7 @@ O zizmor usa o `.github/zizmor.yml` ou o `zizmor.yml` do repo quando existe. Sem
 
 ## `actions/ci-failure-comment`
 
-Num workflow disparado por `workflow_run`, ou por `check_run` do "SonarQube Code Analysis", comenta no PR aberto da run ou do check que falhou mencionando um bot (ex.: o Cyrus), uma vez por commit e no máximo `max-attempts` vezes por PR. Ao atingir o limite, posta um aviso final sem menção. É a única dona das regras do relay: o `relay.yml` só a chama.
+Num workflow disparado por `workflow_run`, ou por `check_run` do "SonarQube Code Analysis", comenta no PR aberto da run ou do check que falhou mencionando um bot (ex.: o Cyrus), uma vez por commit e no máximo `max-attempts` vezes por PR. Ao atingir o limite, posta um aviso final sem menção. As regras do relay moram nela: o `if` do job do `relay.yml` repete o filtro de evento e de conclusão só para não subir um runner à toa, e a action decide sozinha quando a chamam direto.
 
 | Input | Default | Descrição |
 |---|---|---|
@@ -167,7 +168,7 @@ Num workflow disparado por `workflow_run`, ou por `check_run` do "SonarQube Code
 | `author` | `""` | Só comenta em PRs desse autor. Vazio aceita qualquer autor. |
 | `max-attempts` | `"3"` | Máximo de relatos de falha por PR. |
 | `event-path` | `${{ github.event_path }}` | Caminho do payload do `workflow_run` ou do `check_run`. |
-| `token` | `${{ github.token }}` | Token para ler PRs e comentar. |
+| `token` | `${{ github.token }}` | Token para ler PRs e comentar. Precisa comentar como um autor do tipo `Bot` (o `GITHUB_TOKEN` ou o token de um GitHub App), senão a action não reconhece os próprios relatos. |
 
 O job que chama a action precisa de `pull-requests: write`. Com `actions: read`, o comentário lista os jobs que falharam; sem ela, a action emite um aviso e comenta sem a lista.
 
