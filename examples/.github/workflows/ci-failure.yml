@@ -18,6 +18,6 @@ jobs:
     permissions:
       pull-requests: write
     steps:
-      - uses: lcnascimento/gh-workflows/actions/ci-failure-comment@5e115b1da30b70099a34a0f78850bf100a031043 # v1.1.0
+      - uses: lcnascimento/gh-workflows/actions/ci-failure-comment@246fafe99856b3c825561e952180e7c226223374 # v1.3.0
         with:
           bot: homelab-cyrus[bot]
