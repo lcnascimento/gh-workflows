@@ -1,0 +1,23 @@
+name: setup-runtime
+description: Install the language runtime declared by the manifests of the working directory
+
+inputs:
+  working-directory:
+    description: Directory with the manifests
+    default: .
+
+runs:
+  using: composite
+  steps:
+    - id: manifest
+      shell: bash
+      env:
+        DIR: ${{ inputs.working-directory }}
+      run: |
+        [[ -f "$DIR/go.mod" ]] && go=true || go=false
+        echo "go=$go" >> "$GITHUB_OUTPUT"
+    - if: steps.manifest.outputs.go == 'true'
+      uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      with:
+        go-version-file: ${{ inputs.working-directory }}/go.mod
+        cache-dependency-path: ${{ inputs.working-directory }}/go.mod

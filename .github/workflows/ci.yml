@@ -1,0 +1,80 @@
+name: ci
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: Runner label; falls back to vars.CI_RUNNER, then ubuntu-latest
+        type: string
+        default: ''
+      working-directory:
+        description: Directory of the Makefile, relative to the repository root
+        type: string
+        default: .
+    outputs:
+      runner:
+        description: Runner label the jobs ran on
+        value: ${{ jobs.discover.outputs.runner }}
+
+permissions: {}
+
+jobs:
+  discover:
+    runs-on: ${{ inputs.runner || vars.CI_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    permissions: {}
+    outputs:
+      runner: ${{ inputs.runner || vars.CI_RUNNER || 'ubuntu-latest' }}
+      test-component: "false"
+      test-integration: "false"
+      test-e2e: "false"
+    steps:
+      - run: "true"
+
+  lint:
+    needs: discover
+    runs-on: ${{ needs.discover.outputs.runner }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: $/actions/setup-runtime
+        with:
+          working-directory: ${{ inputs.working-directory }}
+      - run: make setup
+      - name: make lint
+        run: make lint
+      - name: make format
+        run: make format
+      - name: git diff
+        run: git diff --exit-code -- .
+      - name: lint-workflows
+        uses: $/actions/lint-workflows
+        with:
+          path: ${{ inputs.working-directory }}/.github/workflows
+
+  test-unit:
+    needs: discover
+    runs-on: ${{ needs.discover.outputs.runner }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: $/actions/setup-runtime
+        with:
+          working-directory: ${{ inputs.working-directory }}
+      - run: make setup
+      - name: make test.unit
+        run: make test.unit

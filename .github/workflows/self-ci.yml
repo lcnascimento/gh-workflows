@@ -33,3 +33,8 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/test-renovate-preset.yml
+
+  test-ci:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/test-ci.yml
