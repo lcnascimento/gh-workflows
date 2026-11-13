@@ -79,8 +79,8 @@ if [[ "$kind" == review ]]; then
     }' | jq --arg reviewer "${REVIEWER%\[bot\]}" --arg bot "${BOT%\[bot\]}" '
       [.data.repository.pullRequest.reviewThreads.nodes[]
         | select((.isResolved | not)
-          and (.opener.nodes[0].author.login | ascii_downcase) == ($reviewer | ascii_downcase)
-          and (.latest.nodes[0].author.login | ascii_downcase) != ($bot | ascii_downcase))]
+          and (.opener.nodes[0].author.login // "" | ascii_downcase) == ($reviewer | ascii_downcase)
+          and (.latest.nodes[0].author.login // "" | ascii_downcase) != ($bot | ascii_downcase))]
       | length')"
   if ((open_threads == 0)); then
     echo "PR #$pr has no open threads of $REVIEWER"

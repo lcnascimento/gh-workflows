@@ -340,6 +340,16 @@ setup
 review_event
 pr 7
 comments 7
+ghost='{"isResolved": false, "opener": {"nodes": [{"author": null}]}, "latest": {"nodes": [{"author": null}]}}'
+answered_by_ghost='{"isResolved": false, "opener": {"nodes": [{"author": {"login": "greptile-apps"}}]}, "latest": {"nodes": [{"author": null}]}}'
+threads "$ghost" "$answered_by_ghost" "$(thread false greptile-apps greptile-apps)"
+run
+check "counts threads with a deleted author" "$(posted 7)" "$review_body"
+
+setup
+review_event
+pr 7
+comments 7
 threads "$(thread true greptile-apps greptile-apps)"
 run
 check "skips a review without open threads" "$(posted 7)|$(cat "$work/out")" "|PR #7 has no open threads of greptile-apps[bot]"
