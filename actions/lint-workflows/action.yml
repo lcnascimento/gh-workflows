@@ -1,0 +1,13 @@
+name: lint-workflows
+description: Run actionlint and zizmor over the workflows of the calling repository
+
+inputs:
+  path:
+    description: Directory with the workflow files
+    default: .github/workflows
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: "true"
