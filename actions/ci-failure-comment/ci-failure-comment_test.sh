@@ -72,7 +72,7 @@ three_reports() {
 api() { printf '%s' "$2" >"$work/api/${1//[\/?&=]/_}.json"; }
 
 run() {
-  GH_STUB_DIR="$work" PATH="$work/bin:$PATH" GITHUB_EVENT_PATH="$work/event.json" \
+  GH_STUB_DIR="$work" PATH="$work/bin:$PATH" EVENT_PATH="$work/event.json" \
     REPO=o/r BOT=homelab-cyrus[bot] AUTHOR="${AUTHOR-homelab-cyrus[bot]}" MAX_ATTEMPTS=3 "$script" >"$work/out" 2>&1 || echo "exit $?" >>"$work/out"
 }
 

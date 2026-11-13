@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-: "${GITHUB_EVENT_PATH:?}" "${REPO:?}" "${BOT:?}" "${MAX_ATTEMPTS:?}"
+: "${EVENT_PATH:?}" "${REPO:?}" "${BOT:?}" "${MAX_ATTEMPTS:?}"
 
 sonar_check="SonarQube Code Analysis"
 
 IFS=$'\x1f' read -r kind name id conclusion sha run_url pr < <(
   jq -r '(if has("check_run") then "check_run" else "workflow_run" end) as $kind | .[$kind]
     | [$kind, .name, .id, .conclusion, .head_sha, .html_url, .pull_requests[0].number] | map(. // "" | tostring) | join("\u001f")' \
-    "$GITHUB_EVENT_PATH"
+    "$EVENT_PATH"
 )
 
 post_comment() { gh api -X POST "repos/$REPO/issues/$pr/comments" -f body="$1" >/dev/null; }
