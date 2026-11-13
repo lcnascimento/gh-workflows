@@ -1,0 +1,61 @@
+name: sonar-args
+description: Assemble the SonarScanner arguments for the event and the coverage artifacts of the run
+
+inputs:
+  project-key:
+    description: Sonar project key; defaults to the repository name
+    default: ''
+  pull-request-sha:
+    description: Head sha of the pull request; empty outside a pull request
+    default: ''
+  ref-name:
+    description: Branch of a push; the quality gate is awaited on the default branch
+    default: ''
+  default-branch:
+    description: Default branch of the repository
+    default: ${{ github.event.repository.default_branch }}
+  coverage-artifact:
+    description: Prefix of the coverage artifacts, named <prefix>-<level>
+    default: ''
+
+outputs:
+  args:
+    description: Arguments for the scanner
+    value: ${{ steps.args.outputs.args }}
+
+runs:
+  using: composite
+  steps:
+    - if: inputs.coverage-artifact != ''
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      with:
+        pattern: ${{ inputs.coverage-artifact }}-*
+        path: ${{ runner.temp }}/sonar-coverage
+    - id: args
+      shell: bash
+      env:
+        PROJECT_KEY: ${{ inputs.project-key }}
+        PULL_REQUEST_SHA: ${{ inputs.pull-request-sha }}
+        REF_NAME: ${{ inputs.ref-name }}
+        DEFAULT_BRANCH: ${{ inputs.default-branch }}
+        COVERAGE_ARTIFACT: ${{ inputs.coverage-artifact }}
+      run: |
+        args=(-Dsonar.projectKey="${PROJECT_KEY:-${GITHUB_REPOSITORY#*/}}")
+        if [[ -n "$PULL_REQUEST_SHA" ]]; then
+          args+=(-Dsonar.scm.revision="$PULL_REQUEST_SHA")
+        elif [[ "$REF_NAME" == "$DEFAULT_BRANCH" ]]; then
+          args+=(-Dsonar.qualitygate.wait=true)
+        fi
+        reports() {
+          [[ -n "$COVERAGE_ARTIFACT" ]] || return 0
+          find "$RUNNER_TEMP/sonar-coverage" -path "$RUNNER_TEMP/sonar-coverage/$COVERAGE_ARTIFACT-*/*" -type f -name "*.$1" 2>/dev/null | sort | paste -sd , -
+        }
+        while read -r extension param; do
+          paths=$(reports "$extension")
+          [[ -z "$paths" ]] || args+=("-D$param=$paths")
+        done <<'MAP'
+        out sonar.go.coverage.reportPaths
+        lcov sonar.javascript.lcov.reportPaths
+        xml sonar.python.coverage.reportPaths
+        MAP
+        echo "args=${args[*]}" >> "$GITHUB_OUTPUT"
