@@ -1,0 +1,23 @@
+name: ci-failure
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.workflow_run.head_sha }}
+
+jobs:
+  mention:
+    if: github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: lcnascimento/gh-workflows/actions/ci-failure-comment@727d52b1f8c1764022485d8315a718d515d405ee # v1.0.0
+        with:
+          bot: homelab-cyrus[bot]
