@@ -52,7 +52,7 @@ jobs:
           jobs=$(gh api --paginate "$RUN" --jq '.jobs[] | {name, conclusion}' | jq -s .)
           status=0
           for caller in go typescript python hcl; do
-            got=$(jq -r --arg n "$caller / sonarqube" '.[] | select(.name | endswith($n)) | .conclusion' <<<"$jobs")
+            got=$(jq -r --arg n "$caller / sonarqube" '[.[] | select(.name == $n or (.name | endswith(" / " + $n))) | .conclusion] | unique | join(",")' <<<"$jobs")
             echo "$caller / sonarqube: want skipped got $got"
             [[ "$got" == skipped ]] || status=1
           done
@@ -105,11 +105,11 @@ jobs:
             echo "  got:  $2"
             [[ "$2" == "$3" ]] || status=1
           }
-          go_dir="$RUNNER_TEMP/sonar-coverage/$GO_ARTIFACT"
+          go_dir="$RUNNER_TEMP/sonar-coverage/$GO_ARTIFACT/$GO_ARTIFACT"
           ts_dir="$RUNNER_TEMP/sonar-coverage/$TYPESCRIPT_ARTIFACT"
           py_dir="$RUNNER_TEMP/sonar-coverage/$PYTHON_ARTIFACT"
           check "pull request, default key, Go levels" "$GO" "-Dsonar.projectKey=gh-workflows -Dsonar.scm.revision=0123456789abcdef0123456789abcdef01234567 -Dsonar.go.coverage.reportPaths=$go_dir-e2e/e2e.out,$go_dir-integration/integration.out,$go_dir-unit/unit.out"
-          check "main, key override, lcov" "$TYPESCRIPT" "-Dsonar.projectKey=homelab-typescript -Dsonar.qualitygate.wait=true -Dsonar.javascript.lcov.reportPaths=$ts_dir-unit/unit.lcov"
-          check "other branch, Cobertura" "$PYTHON" "-Dsonar.projectKey=gh-workflows -Dsonar.python.coverage.reportPaths=$py_dir-unit/unit.xml"
+          check "main, key override, lcov" "$TYPESCRIPT" "-Dsonar.projectKey=homelab-typescript -Dsonar.qualitygate.wait=true -Dsonar.javascript.lcov.reportPaths=$ts_dir/unit.lcov"
+          check "other branch, Cobertura" "$PYTHON" "-Dsonar.projectKey=gh-workflows -Dsonar.python.coverage.reportPaths=$py_dir/unit.xml"
           check "pull request, no coverage" "$HCL" "-Dsonar.projectKey=homelab-hcl -Dsonar.scm.revision=fedcba9876543210fedcba9876543210fedcba98"
           exit "$status"

@@ -30,7 +30,7 @@ runs:
       uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
       with:
         pattern: ${{ inputs.coverage-artifact }}-*
-        path: ${{ runner.temp }}/sonar-coverage
+        path: ${{ runner.temp }}/sonar-coverage/${{ inputs.coverage-artifact }}
     - id: args
       shell: bash
       env:
@@ -48,7 +48,7 @@ runs:
         fi
         reports() {
           [[ -n "$COVERAGE_ARTIFACT" ]] || return 0
-          find "$RUNNER_TEMP/sonar-coverage" -path "$RUNNER_TEMP/sonar-coverage/$COVERAGE_ARTIFACT-*/*" -type f -name "*.$1" 2>/dev/null | sort | paste -sd , -
+          find "$RUNNER_TEMP/sonar-coverage/$COVERAGE_ARTIFACT" -type f -name "*.$1" 2>/dev/null | sort | paste -sd , -
         }
         while read -r extension param; do
           paths=$(reports "$extension")
