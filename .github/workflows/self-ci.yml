@@ -36,5 +36,6 @@ jobs:
 
   test-ci:
     permissions:
+      actions: read
       contents: read
     uses: ./.github/workflows/test-ci.yml

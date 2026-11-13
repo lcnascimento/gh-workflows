@@ -84,3 +84,77 @@ jobs:
           echo "$INSTALLED"
           test "$(jq -cS . <<< "$INSTALLED")" = '{"go":"false","node":"false","opentofu":"false","python":"false"}'
           ! command -v tofu
+
+  levels:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+    with:
+      working-directory: testdata/ci/levels
+
+  doppler:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+    with:
+      working-directory: testdata/ci/doppler
+    secrets:
+      doppler-token: dp.st.hlb-206-dummy
+
+  assert-levels:
+    needs: [clean, levels, doppler]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}/jobs
+        run: |
+          jobs=$(gh api --paginate "$RUN" --jq '.jobs[] | {name, conclusion}' | jq -s .)
+          status=0
+          while IFS='|' read -r name conclusion; do
+            got=$(jq -r --arg n "$name" '.[] | select(.name == $n or (.name | endswith(" / " + $n))) | .conclusion' <<<"$jobs")
+            echo "$name: want $conclusion got $got"
+            [[ "$got" == "$conclusion" ]] || status=1
+          done <<'EXPECT'
+          clean / test-unit|success
+          clean / test-component|skipped
+          clean / test-integration|skipped
+          clean / test-e2e|skipped
+          levels / test-unit|success
+          levels / test-component|skipped
+          levels / test-integration|success
+          levels / test-e2e|success
+          doppler / lint|success
+          doppler / test-unit|success
+          doppler / test-component|success
+          doppler / test-integration|success
+          doppler / test-e2e|success
+          EXPECT
+          exit "$status"
+
+  assert-coverage:
+    needs: [levels, typescript, python]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: coverage
+      - env:
+          LEVELS: ${{ needs.levels.outputs.coverage-artifact }}
+          TYPESCRIPT: ${{ needs.typescript.outputs.coverage-artifact }}
+          PYTHON: ${{ needs.python.outputs.coverage-artifact }}
+        working-directory: coverage
+        run: |
+          find . -type f | sort
+          [[ -n "$LEVELS" && -n "$TYPESCRIPT" && -n "$PYTHON" ]]
+          test "$(find "$LEVELS"-* -type f | sort)" = "$LEVELS-e2e/e2e.out
+          $LEVELS-integration/integration.out
+          $LEVELS-unit/unit.out"
+          test -f "$TYPESCRIPT-unit/unit.lcov"
+          test -f "$PYTHON-unit/unit.xml"
