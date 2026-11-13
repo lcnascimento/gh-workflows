@@ -1,0 +1,40 @@
+name: test-lint-workflows
+
+on:
+  workflow_call:
+
+permissions: {}
+
+jobs:
+  lint-workflows:
+    name: ${{ matrix.fixture }} -> ${{ matrix.expect }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - fixture: valid
+            expect: success
+          - fixture: actionlint-error
+            expect: failure
+          - fixture: zizmor-finding
+            expect: failure
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: lint
+        continue-on-error: true
+        uses: ./actions/lint-workflows
+        with:
+          path: actions/lint-workflows/testdata/${{ matrix.fixture }}
+      - name: Assert outcome
+        env:
+          OUTCOME: ${{ steps.lint.outcome }}
+          EXPECT: ${{ matrix.expect }}
+        run: |
+          echo "outcome=$OUTCOME expect=$EXPECT"
+          test "$OUTCOME" = "$EXPECT"
