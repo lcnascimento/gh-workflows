@@ -7,9 +7,9 @@ Workflows reusáveis e composite actions da CI dos Consumidores. Um repo em Go, 
 |---|---|---|
 | `ci.yml` | `lcnascimento/gh-workflows/.github/workflows/ci.yml` | CI completa: `discover`, `lint`, um job por nível de teste e o `sonarqube` aninhado. |
 | `sonarqube.yml` | `lcnascimento/gh-workflows/.github/workflows/sonarqube.yml` | Uma análise do SonarQube, invocável sozinha. |
-| `relay.yml` | `lcnascimento/gh-workflows/.github/workflows/relay.yml` | Acorda o bot do Cyrus quando a CI de um PR dele falha, com limite de iterações por PR. |
+| `relay.yml` | `lcnascimento/gh-workflows/.github/workflows/relay.yml` | Acorda o bot do Cyrus quando a CI de um PR dele falha ou o check "SonarQube Code Analysis" reprova, com limite de iterações por PR. |
 | `lint-workflows` | `lcnascimento/gh-workflows/actions/lint-workflows` | actionlint e zizmor sobre os workflows do repo. |
-| `ci-failure-comment` | `lcnascimento/gh-workflows/actions/ci-failure-comment` | Menciona um bot no PR cuja CI falhou, uma vez por commit e até um limite por PR. É a lógica do `relay.yml`. |
+| `ci-failure-comment` | `lcnascimento/gh-workflows/actions/ci-failure-comment` | Menciona um bot no PR cuja CI falhou ou cujo check do Sonar reprovou, uma vez por commit e até um limite por PR. É a lógica do `relay.yml`. |
 | `default.json` | `github>lcnascimento/gh-workflows` | Preset do Renovate. |
 
 Os exemplos de caller ficam em [`examples/.github/workflows/`](examples/.github/workflows/): copie para o `.github/workflows/` do Consumidor.
@@ -117,7 +117,7 @@ Secret `sonar-token` (token de análise do projeto) e variáveis `SONAR_HOST_URL
 
 ## `relay.yml`
 
-O relay acorda o Cyrus quando a CI do Consumidor falha num PR aberto pelo bot. O caller reage ao `workflow_run` (`completed`) do workflow de CI e chama o reusável, que roda a action `ci-failure-comment` do mesmo SHA.
+O relay acorda o Cyrus quando a CI do Consumidor falha ou quando o check run "SonarQube Code Analysis" reprova num PR aberto pelo bot. O caller reage ao `workflow_run` (`completed`) do workflow de CI e ao `check_run` (`completed`), e chama o reusável, que roda a action `ci-failure-comment` do mesmo SHA.
 
 | Input | Tipo | Default | Descrição |
 |---|---|---|---|
@@ -126,17 +126,20 @@ O relay acorda o Cyrus quando a CI do Consumidor falha num PR aberto pelo bot. O
 
 Sem secrets: o relay usa o `GITHUB_TOKEN` do caller.
 
-A cada `workflow_run`, o relay:
+A cada `workflow_run` ou `check_run`, o relay:
 
-1. ignora a run se a conclusão não for `failure`;
-2. acha o PR da run (pelo evento ou, num PR de fork, pelo head SHA entre os PRs abertos) e o ignora se estiver fechado ou se o autor não for `bot-login`;
-3. ignora o SHA que já tem relato;
-4. ao atingir `max-iterations` relatos, posta um aviso final sem menção, uma vez só, e depois não comenta mais;
-5. senão, comenta mencionando o bot, com o link da run e os jobs que falharam.
+1. ignora um check run com outro nome que não "SonarQube Code Analysis";
+2. ignora a run ou o check se a conclusão não for `failure`;
+3. acha o PR (pelo evento ou, se a lista do evento vier vazia, pelo head SHA entre os PRs abertos) e o ignora se estiver fechado ou se o autor não for `bot-login`;
+4. ignora o SHA que já tem relato, venha ele da CI ou do Sonar;
+5. ao atingir `max-iterations` relatos, posta um aviso final sem menção, uma vez só, e depois não comenta mais;
+6. senão, comenta mencionando o bot, com o link da run e os jobs que falharam, ou com o link do check do Sonar.
 
-A contagem sai dos comentários do PR, sem estado externo. Cada relato leva o marcador invisível `<!-- cyrus-ci-failure sha=<sha> -->`, e o aviso final leva `<!-- cyrus-ci-failure limit -->`.
+A falha da CI e a reprovação do Sonar dividem o marcador e o contador: no mesmo SHA, o bot recebe um comentário só, e ele conta uma iteração. A contagem sai dos comentários do PR, sem estado externo. Cada relato leva o marcador invisível `<!-- cyrus-ci-failure sha=<sha> -->`, e o aviso final leva `<!-- cyrus-ci-failure limit -->`.
 
-O reusável não faz checkout: o script vem da action no SHA do reusável, e nenhum código do PR roda no gatilho privilegiado. Por isso o `workflow_run` do caller leva um `# zizmor: ignore[dangerous-triggers]`.
+O reusável não faz checkout: o script vem da action no SHA do reusável, e nenhum código do PR roda no gatilho privilegiado. Por isso o `workflow_run` e o `check_run` do caller levam um `# zizmor: ignore[dangerous-triggers]`.
+
+O job do reusável só roda num `check_run` do Sonar que reprovou, e define a própria `concurrency` por head SHA. Assim os eventos da CI e do Sonar do mesmo commit rodam em série, sem comentário duplicado, e os check runs de outros nomes não ocupam a fila. O caller não precisa de `concurrency`.
 
 | Job | Permissões |
 |---|---|
@@ -156,14 +159,14 @@ O zizmor usa o `.github/zizmor.yml` ou o `zizmor.yml` do repo quando existe. Sem
 
 ## `actions/ci-failure-comment`
 
-Num workflow disparado por `workflow_run`, comenta no PR aberto da run que falhou mencionando um bot (ex.: o Cyrus), uma vez por commit e no máximo `max-attempts` vezes por PR. Ao atingir o limite, posta um aviso final sem menção. É a única dona das regras do relay: o `relay.yml` só a chama.
+Num workflow disparado por `workflow_run`, ou por `check_run` do "SonarQube Code Analysis", comenta no PR aberto da run ou do check que falhou mencionando um bot (ex.: o Cyrus), uma vez por commit e no máximo `max-attempts` vezes por PR. Ao atingir o limite, posta um aviso final sem menção. É a única dona das regras do relay: o `relay.yml` só a chama.
 
 | Input | Default | Descrição |
 |---|---|---|
 | `bot` | obrigatório | Login do bot, ex.: `homelab-cyrus[bot]`. |
 | `author` | `""` | Só comenta em PRs desse autor. Vazio aceita qualquer autor. |
 | `max-attempts` | `"3"` | Máximo de relatos de falha por PR. |
-| `event-path` | `${{ github.event_path }}` | Caminho do payload do `workflow_run`. |
+| `event-path` | `${{ github.event_path }}` | Caminho do payload do `workflow_run` ou do `check_run`. |
 | `token` | `${{ github.token }}` | Token para ler PRs e comentar. |
 
 O job que chama a action precisa de `pull-requests: write`. Com `actions: read`, o comentário lista os jobs que falharam; sem ela, a action emite um aviso e comenta sem a lista.
@@ -186,11 +189,11 @@ Todo reusável roda em `inputs.runner || vars.CI_RUNNER || 'ubuntu-latest'`. O r
 
 ## Exemplos de caller
 
-Os reusáveis não definem `concurrency`: o caller decide o cancelamento. Os exemplos cancelam a run anterior do mesmo PR e nunca cancelam uma run da `main`.
+Os reusáveis não definem `concurrency`, exceto o `relay.yml`, que serializa os relatos do mesmo SHA: o caller decide o cancelamento. Os exemplos cancelam a run anterior do mesmo PR e nunca cancelam uma run da `main`.
 
 - [`ci.yml`](examples/.github/workflows/ci.yml): chama o `ci.yml` com `sonar-token` e `doppler-token`.
 - [`sonarqube.yml`](examples/.github/workflows/sonarqube.yml): chama o `sonarqube.yml` sozinho, para um repo cuja CI não é o `ci.yml`.
-- [`relay.yml`](examples/.github/workflows/relay.yml): chama o `relay.yml` quando o workflow `ci` termina. O `workflow_run` leva um `# zizmor: ignore[dangerous-triggers]` porque o relay só lê os metadados da run e do PR e nunca faz checkout.
+- [`relay.yml`](examples/.github/workflows/relay.yml): chama o `relay.yml` quando o workflow `ci` termina e quando um check run termina. O `workflow_run` e o `check_run` levam um `# zizmor: ignore[dangerous-triggers]` porque o relay só lê os metadados da run, do check e do PR e nunca faz checkout.
 - [`ci-failure.yml`](examples/.github/workflows/ci-failure.yml): menciona o Cyrus quando o workflow `ci` falha num PR. O `workflow_run` leva um `# zizmor: ignore[dangerous-triggers]` porque o job só lê os metadados da run e nunca faz checkout do código do PR.
 
 Os exemplos `ci.yml` e `sonarqube.yml` são alternativas: copie um ou outro, nunca os dois. O `ci.yml` já roda o `sonarqube.yml` aninhado, e os dois juntos fazem duas análises por evento.
