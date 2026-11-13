@@ -1,0 +1,48 @@
+name: test-ci-failure-comment
+
+on:
+  workflow_call:
+
+permissions: {}
+
+jobs:
+  script:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: actions/ci-failure-comment/ci-failure-comment_test.sh
+
+  action:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Stub gh
+        run: |
+          mkdir -p "$RUNNER_TEMP/stub"
+          cat >"$RUNNER_TEMP/stub/gh" <<'STUB'
+          #!/usr/bin/env bash
+          printf '%s\n' "$*" >>"$RUNNER_TEMP/gh-calls"
+          echo '[]'
+          STUB
+          chmod +x "$RUNNER_TEMP/stub/gh"
+          echo "$RUNNER_TEMP/stub" >>"$GITHUB_PATH"
+      - id: comment
+        uses: ./actions/ci-failure-comment
+        with:
+          bot: homelab-cyrus[bot]
+      - name: Assert the action ran the script against the caller repository
+        env:
+          REPO: ${{ github.repository }}
+        run: |
+          cat "$RUNNER_TEMP/gh-calls"
+          test "$(cat "$RUNNER_TEMP/gh-calls")" = "api --paginate repos/$REPO/pulls?state=open&per_page=100"
