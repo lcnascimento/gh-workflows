@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.0.0](https://github.com/lcnascimento/gh-workflows/compare/v1.3.0...v2.0.0) (2026-11-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* **relay:** the reviewer-login input is replaced by reviewer-logins, a newline-separated list of logins.
+* **ci-failure-comment:** the reviewer input is replaced by reviewers.
+
+### Features
+
+* **ci-failure-comment:** wake the bot on open threads of any reviewer ([d8d19b1](https://github.com/lcnascimento/gh-workflows/commit/d8d19b1398b06fa912dbf5518b8c0ec1344fb968))
+* **relay:** take a list of reviewer logins ([6c8a57a](https://github.com/lcnascimento/gh-workflows/commit/6c8a57ad6672410de8b48ffaaa5d1ab72026945f))
+
+
+### Bug Fixes
+
+* **ci-failure-comment:** count a reviewer listed twice once ([42387f7](https://github.com/lcnascimento/gh-workflows/commit/42387f7823c30bf5beba3c2af4c883e8764c2abb))
+
 ## [1.3.0](https://github.com/lcnascimento/gh-workflows/compare/v1.2.0...v1.3.0) (2026-11-13)
 
 
