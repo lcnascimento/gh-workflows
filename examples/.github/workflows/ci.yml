@@ -21,7 +21,7 @@ jobs:
   ci:
     permissions:
       contents: read
-    uses: lcnascimento/gh-workflows/.github/workflows/ci.yml@246fafe99856b3c825561e952180e7c226223374 # v1.3.0
+    uses: lcnascimento/gh-workflows/.github/workflows/ci.yml@cc74614022fd8ce98a481110dc9bf6dc50050777 # v2.0.0
     with:
       runner: ${{ inputs.runner }}
     secrets:
