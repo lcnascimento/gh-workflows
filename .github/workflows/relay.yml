@@ -11,8 +11,8 @@ on:
         description: Login of the bot whose pull requests are relayed, e.g. homelab-cyrus[bot]
         type: string
         required: true
-      reviewer-login:
-        description: Login of the automatic reviewer, e.g. greptile-apps[bot], whose submitted reviews wake the bot on open threads; empty ignores reviews
+      reviewer-logins:
+        description: Newline-separated logins of the automatic reviewers, e.g. greptile-apps[bot], whose submitted reviews wake the bot on open threads; empty ignores reviews
         type: string
         default: ''
       max-iterations:
@@ -27,7 +27,7 @@ jobs:
     if: >-
       github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure'
       || github.event_name == 'check_run' && github.event.check_run.name == 'SonarQube Code Analysis' && github.event.check_run.conclusion == 'failure'
-      || github.event_name == 'pull_request_review' && inputs.reviewer-login != '' && github.event.review.user.login == inputs.reviewer-login
+      || github.event_name == 'pull_request_review' && inputs.reviewer-logins != '' && contains(inputs.reviewer-logins, github.event.review.user.login)
       || github.event_name != 'workflow_run' && github.event_name != 'check_run' && github.event_name != 'pull_request_review'
     concurrency:
       group: ${{ github.workflow }}-relay-${{ github.event.workflow_run.head_sha || github.event.check_run.head_sha || github.event_name == 'pull_request_review' && github.event.pull_request.head.sha || github.run_id }}
@@ -41,5 +41,5 @@ jobs:
         with:
           bot: ${{ inputs.bot-login }}
           author: ${{ inputs.bot-login }}
-          reviewer: ${{ inputs.reviewer-login }}
+          reviewers: ${{ inputs.reviewer-logins }}
           max-attempts: ${{ inputs.max-iterations }}

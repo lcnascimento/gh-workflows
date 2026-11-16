@@ -19,4 +19,5 @@ jobs:
     uses: lcnascimento/gh-workflows/.github/workflows/relay.yml@246fafe99856b3c825561e952180e7c226223374 # v1.3.0
     with:
       bot-login: homelab-cyrus[bot]
-      reviewer-login: greptile-apps[bot]
+      reviewer-logins: |
+        greptile-apps[bot]
