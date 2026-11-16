@@ -378,7 +378,7 @@ pr 7
 comments 7
 threads "$(thread false greptile-apps greptile-apps)"
 REVIEWERS='' run
-check "ignores a review without a reviewer login" "$(posted 7)|$(cat "$work/out")" "|review 99 ignored without reviewer logins"
+check "ignores a review without reviewer logins" "$(posted 7)|$(cat "$work/out")" "|review 99 ignored without reviewer logins"
 
 setup
 review_event
@@ -417,7 +417,6 @@ check "marks a review of an old commit with the current head" "$(posted 7)" '@ho
 - greptile-apps[bot]: 1
 
 <!-- cyrus-ci-failure sha=abc123 -->'
-
 
 setup
 review_event homelab-octopus[bot]
@@ -459,7 +458,7 @@ pr 7
 comments 7
 threads "$(thread false greptile-apps greptile-apps)"
 run
-check "ignores a review by a login outside the list" "$(posted 7)|$(cat "$work/out")" "|review 99 by lcnascimento is not of a reviewer"
+check "ignores a review by a login outside the list" "$(posted 7)|$(cat "$work/out")" "|review 99 by lcnascimento is not by a listed reviewer"
 
 setup
 review_event homelab-octopus[bot]
@@ -472,5 +471,13 @@ check "trims blank lines and spaces of the reviewer list" "$(posted 7)" '@homela
 - Homelab-Octopus[bot]: 1
 
 <!-- cyrus-ci-failure sha=abc123 -->'
+
+setup
+review_event
+pr 7
+comments 7
+threads "$(thread false greptile-apps greptile-apps)" "$(thread false greptile-apps lcnascimento)"
+REVIEWERS=$'greptile-apps[bot]\nGreptile-Apps' run
+check "counts a reviewer listed twice once" "$(posted 7)" "$review_body"
 
 exit "$failures"

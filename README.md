@@ -123,7 +123,7 @@ O relay acorda o Cyrus quando a CI do Consumidor falha, quando o check run "Sona
 |---|---|---|---|
 | `runner` | string | `''` | Label do runner, com o mesmo fallback do `ci.yml`. |
 | `bot-login` | string | obrigatório | Login do bot, ex.: `homelab-cyrus[bot]`. O relay só age em PRs com esse autor e menciona esse login. |
-| `reviewer-logins` | string | `''` | Logins dos Revisores, um por linha, ex.: `greptile-apps[bot]`. Uma review enviada por qualquer um deles acorda o bot nas threads abertas. Linhas vazias e espaços nas pontas são ignorados. Vazio ignora as reviews. |
+| `reviewer-logins` | string | `''` | Logins completos dos Revisores, com o sufixo `[bot]`, um por linha, ex.: `greptile-apps[bot]`. Uma review enviada por qualquer um deles acorda o bot nas threads abertas. Linhas vazias e espaços nas pontas são ignorados. Vazio ignora as reviews. |
 | `max-iterations` | number | `3` | Máximo de relatos automáticos por PR. |
 
 Sem secrets: o relay usa o `GITHUB_TOKEN` do caller.

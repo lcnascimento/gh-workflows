@@ -5,7 +5,9 @@ set -euo pipefail
 
 sonar_check="SonarQube Code Analysis"
 login_key='def key: ascii_downcase | sub("\\[bot\\]$"; "");'
-reviewers="$(jq -Rnc '[inputs | gsub("^\\s+|\\s+$"; "") | select(. != "")]' <<<"${REVIEWERS:-}")"
+reviewers="$(jq -Rnc "$login_key"'
+  reduce (inputs | gsub("^\\s+|\\s+$"; "") | select(. != "")) as $login
+    ([]; if any(.[]; key == ($login | key)) then . else . + [$login] end)' <<<"${REVIEWERS:-}")"
 
 IFS=$'\x1f' read -r kind name id conclusion sha run_url pr reviewer < <(
   jq -r 'if has("review") then ["review", "", .review.id, "", .pull_request.head.sha, .review.html_url, .pull_request.number, .review.user.login]
@@ -29,7 +31,7 @@ if [[ "$kind" == review ]]; then
     exit 0
   fi
   if ! jq -e --arg login "$reviewer" "$login_key"' any(.[]; key == ($login | key))' <<<"$reviewers" >/dev/null; then
-    echo "review $id by $reviewer is not of a reviewer"
+    echo "review $id by $reviewer is not by a listed reviewer"
     exit 0
   fi
 elif [[ "$kind" == check_run ]]; then
@@ -69,7 +71,7 @@ if [[ -n "${AUTHOR:-}" && "$author" != "$AUTHOR" ]]; then
 fi
 
 if [[ "$kind" == review ]]; then
-  open_threads="$(gh api graphql -F number="$pr" -f owner="${REPO%/*}" -f name="${REPO#*/}" -f query='
+  threads_by_reviewer="$(gh api graphql -F number="$pr" -f owner="${REPO%/*}" -f name="${REPO#*/}" -f query='
     query($owner: String!, $name: String!, $number: Int!) {
       repository(owner: $owner, name: $name) {
         pullRequest(number: $number) {
@@ -87,8 +89,8 @@ if [[ "$kind" == review ]]; then
         | select((.isResolved | not) and (.latest.nodes[0].author.login // "" | key) != ($bot | key))
         | .opener.nodes[0].author.login // "" | key] as $openers
       | [$reviewers[] | {login: ., count: (key as $k | [$openers[] | select(. == $k)] | length)} | select(.count > 0)]')"
-  total="$(jq 'map(.count) | add // 0' <<<"$open_threads")"
-  if ((total == 0)); then
+  open_total="$(jq 'map(.count) | add // 0' <<<"$threads_by_reviewer")"
+  if ((open_total == 0)); then
     echo "PR #$pr has no open threads of the reviewers"
     exit 0
   fi
@@ -120,9 +122,10 @@ $limit_marker"
 fi
 
 if [[ "$kind" == review ]]; then
-  report "@$BOT há $total threads abertas de Revisores no commit $sha: $run_url
+  reviewer_lines="$(jq -r '.[] | "- \(.login): \(.count)"' <<<"$threads_by_reviewer")"
+  report "@$BOT há $open_total threads abertas de Revisores no commit $sha: $run_url
 
-$(jq -r '.[] | "- \(.login): \(.count)"' <<<"$open_threads")
+$reviewer_lines
 
 $marker"
 fi
