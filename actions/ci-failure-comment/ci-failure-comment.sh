@@ -4,9 +4,11 @@ set -euo pipefail
 : "${EVENT_PATH:?}" "${REPO:?}" "${BOT:?}" "${MAX_ATTEMPTS:?}"
 
 sonar_check="SonarQube Code Analysis"
+login_key='def key: ascii_downcase | sub("\\[bot\\]$"; "");'
+reviewers="$(jq -Rnc '[inputs | gsub("^\\s+|\\s+$"; "") | select(. != "")]' <<<"${REVIEWERS:-}")"
 
-IFS=$'\x1f' read -r kind name id conclusion sha run_url pr < <(
-  jq -r 'if has("review") then ["review", "", .review.id, "", .pull_request.head.sha, .review.html_url, .pull_request.number]
+IFS=$'\x1f' read -r kind name id conclusion sha run_url pr reviewer < <(
+  jq -r 'if has("review") then ["review", "", .review.id, "", .pull_request.head.sha, .review.html_url, .pull_request.number, .review.user.login]
     else (if has("check_run") then "check_run" else "workflow_run" end) as $kind | .[$kind]
       | [$kind, .name, .id, .conclusion, .head_sha, .html_url, .pull_requests[0].number] end
     | map(. // "" | tostring) | join("\u001f")' \
@@ -22,8 +24,12 @@ report() {
 }
 
 if [[ "$kind" == review ]]; then
-  if [[ -z "${REVIEWER:-}" ]]; then
-    echo "review $id ignored without a reviewer login"
+  if [[ "$reviewers" == "[]" ]]; then
+    echo "review $id ignored without reviewer logins"
+    exit 0
+  fi
+  if ! jq -e --arg login "$reviewer" "$login_key"' any(.[]; key == ($login | key))' <<<"$reviewers" >/dev/null; then
+    echo "review $id by $reviewer is not of a reviewer"
     exit 0
   fi
 elif [[ "$kind" == check_run ]]; then
@@ -76,14 +82,14 @@ if [[ "$kind" == review ]]; then
           }
         }
       }
-    }' | jq --arg reviewer "${REVIEWER%\[bot\]}" --arg bot "${BOT%\[bot\]}" '
+    }' | jq -c --argjson reviewers "$reviewers" --arg bot "$BOT" "$login_key"'
       [.data.repository.pullRequest.reviewThreads.nodes[]
-        | select((.isResolved | not)
-          and (.opener.nodes[0].author.login // "" | ascii_downcase) == ($reviewer | ascii_downcase)
-          and (.latest.nodes[0].author.login // "" | ascii_downcase) != ($bot | ascii_downcase))]
-      | length')"
-  if ((open_threads == 0)); then
-    echo "PR #$pr has no open threads of $REVIEWER"
+        | select((.isResolved | not) and (.latest.nodes[0].author.login // "" | key) != ($bot | key))
+        | .opener.nodes[0].author.login // "" | key] as $openers
+      | [$reviewers[] | {login: ., count: (key as $k | [$openers[] | select(. == $k)] | length)} | select(.count > 0)]')"
+  total="$(jq 'map(.count) | add // 0' <<<"$open_threads")"
+  if ((total == 0)); then
+    echo "PR #$pr has no open threads of the reviewers"
     exit 0
   fi
 fi
@@ -114,7 +120,9 @@ $limit_marker"
 fi
 
 if [[ "$kind" == review ]]; then
-  report "@$BOT o Revisor deixou $open_threads threads abertas no commit $sha: $run_url
+  report "@$BOT há $total threads abertas de Revisores no commit $sha: $run_url
+
+$(jq -r '.[] | "- \(.login): \(.count)"' <<<"$open_threads")
 
 $marker"
 fi

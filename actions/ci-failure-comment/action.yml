@@ -1,5 +1,5 @@
 name: ci-failure-comment
-description: Mention a bot on the pull request whose CI failed, whose SonarQube Code Analysis check failed or whose reviewer left open threads, once per commit and up to a limit per pull request, from a workflow_run, check_run or pull_request_review event
+description: Mention a bot on the pull request whose CI failed, whose SonarQube Code Analysis check failed or whose reviewers left open threads, once per commit and up to a limit per pull request, from a workflow_run, check_run or pull_request_review event
 
 inputs:
   bot:
@@ -8,8 +8,8 @@ inputs:
   author:
     description: Only comment on pull requests opened by this login; empty accepts any author
     default: ""
-  reviewer:
-    description: Login of the automatic reviewer, e.g. greptile-apps[bot], whose open threads wake the bot on a pull_request_review event; empty ignores reviews
+  reviewers:
+    description: Newline-separated logins of the automatic reviewers, e.g. greptile-apps[bot], whose open threads wake the bot on a pull_request_review event; empty ignores reviews
     default: ""
   max-attempts:
     description: Maximum number of failure reports per pull request, after which a final notice without mention is posted
@@ -31,6 +31,6 @@ runs:
         REPO: ${{ github.repository }}
         BOT: ${{ inputs.bot }}
         AUTHOR: ${{ inputs.author }}
-        REVIEWER: ${{ inputs.reviewer }}
+        REVIEWERS: ${{ inputs.reviewers }}
         MAX_ATTEMPTS: ${{ inputs.max-attempts }}
       run: "$GITHUB_ACTION_PATH/ci-failure-comment.sh"

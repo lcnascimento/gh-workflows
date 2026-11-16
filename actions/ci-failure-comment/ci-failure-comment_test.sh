@@ -48,7 +48,7 @@ JSON
 
 review_event() {
   cat >"$work/event.json" <<JSON
-{"review": {"id": 99, "state": "COMMENTED", "commit_id": "old456", "html_url": "https://github.com/o/r/pull/7#pullrequestreview-99", "user": {"login": "greptile-apps[bot]"}}, "pull_request": {"number": 7, "head": {"sha": "abc123"}}}
+{"review": {"id": 99, "state": "COMMENTED", "commit_id": "old456", "html_url": "https://github.com/o/r/pull/7#pullrequestreview-99", "user": {"login": "${1:-greptile-apps[bot]}"}}, "pull_request": {"number": 7, "head": {"sha": "abc123"}}}
 JSON
 }
 
@@ -87,7 +87,7 @@ api() { printf '%s' "$2" >"$work/api/${1//[\/?&=]/_}.json"; }
 
 run() {
   GH_STUB_DIR="$work" PATH="$work/bin:$PATH" EVENT_PATH="$work/event.json" \
-    REPO=o/r BOT=homelab-cyrus[bot] AUTHOR="${AUTHOR-homelab-cyrus[bot]}" REVIEWER="${REVIEWER-greptile-apps[bot]}" MAX_ATTEMPTS=3 "$script" >"$work/out" 2>&1 || echo "exit $?" >>"$work/out"
+    REPO=o/r BOT=homelab-cyrus[bot] AUTHOR="${AUTHOR-homelab-cyrus[bot]}" REVIEWERS="${REVIEWERS-$'greptile-apps[bot]\nhomelab-octopus[bot]'}" MAX_ATTEMPTS=3 "$script" >"$work/out" 2>&1 || echo "exit $?" >>"$work/out"
 }
 
 posted() { cat "$work/posted-repos_o_r_issues_$1_comments" 2>/dev/null || true; }
@@ -316,7 +316,9 @@ check "counts Sonar failures against the same limit" "$(posted 7)|$(cat "$work/o
 
 <!-- cyrus-ci-failure limit -->|PR #7 reached 3 CI failure reports"
 
-review_body='@homelab-cyrus[bot] o Revisor deixou 2 threads abertas no commit abc123: https://github.com/o/r/pull/7#pullrequestreview-99
+review_body='@homelab-cyrus[bot] há 2 threads abertas de Revisores no commit abc123: https://github.com/o/r/pull/7#pullrequestreview-99
+
+- greptile-apps[bot]: 2
 
 <!-- cyrus-ci-failure sha=abc123 -->'
 
@@ -333,8 +335,8 @@ review_event
 pr 7
 comments 7
 threads "$(thread false greptile-apps greptile-apps)" "$(thread false greptile-apps lcnascimento)"
-REVIEWER='Greptile-Apps[bot]' run
-check "matches the reviewer login case-insensitively" "$(posted 7)" "$review_body"
+REVIEWERS='Greptile-Apps[bot]' run
+check "matches the reviewer login case-insensitively" "$(posted 7)" "${review_body/greptile-apps/Greptile-Apps}"
 
 setup
 review_event
@@ -352,7 +354,7 @@ pr 7
 comments 7
 threads "$(thread true greptile-apps greptile-apps)"
 run
-check "skips a review without open threads" "$(posted 7)|$(cat "$work/out")" "|PR #7 has no open threads of greptile-apps[bot]"
+check "skips a review without open threads" "$(posted 7)|$(cat "$work/out")" "|PR #7 has no open threads of the reviewers"
 
 setup
 review_event
@@ -360,7 +362,7 @@ pr 7
 comments 7
 threads "$(thread false greptile-apps homelab-cyrus)"
 run
-check "skips a thread last answered by the bot" "$(posted 7)|$(cat "$work/out")" "|PR #7 has no open threads of greptile-apps[bot]"
+check "skips a thread last answered by the bot" "$(posted 7)|$(cat "$work/out")" "|PR #7 has no open threads of the reviewers"
 
 setup
 review_event
@@ -368,15 +370,15 @@ pr 7
 comments 7
 threads "$(thread false lcnascimento lcnascimento)"
 run
-check "skips a thread opened by another author" "$(posted 7)|$(cat "$work/out")" "|PR #7 has no open threads of greptile-apps[bot]"
+check "skips a thread opened by another author" "$(posted 7)|$(cat "$work/out")" "|PR #7 has no open threads of the reviewers"
 
 setup
 review_event
 pr 7
 comments 7
 threads "$(thread false greptile-apps greptile-apps)"
-REVIEWER='' run
-check "ignores a review without a reviewer login" "$(posted 7)|$(cat "$work/out")" "|review 99 ignored without a reviewer login"
+REVIEWERS='' run
+check "ignores a review without a reviewer login" "$(posted 7)|$(cat "$work/out")" "|review 99 ignored without reviewer logins"
 
 setup
 review_event
@@ -410,7 +412,64 @@ pr 7
 comments 7 "$(relay_comment '<!-- cyrus-ci-failure sha=old456 -->')"
 threads "$(thread false greptile-apps greptile-apps)"
 run
-check "marks a review of an old commit with the current head" "$(posted 7)" '@homelab-cyrus[bot] o Revisor deixou 1 threads abertas no commit abc123: https://github.com/o/r/pull/7#pullrequestreview-99
+check "marks a review of an old commit with the current head" "$(posted 7)" '@homelab-cyrus[bot] há 1 threads abertas de Revisores no commit abc123: https://github.com/o/r/pull/7#pullrequestreview-99
+
+- greptile-apps[bot]: 1
+
+<!-- cyrus-ci-failure sha=abc123 -->'
+
+
+setup
+review_event homelab-octopus[bot]
+pr 7
+comments 7
+threads "$(thread false greptile-apps greptile-apps)" "$(thread false homelab-octopus homelab-octopus)" \
+  "$(thread false homelab-octopus lcnascimento)" "$(thread false homelab-octopus homelab-cyrus)"
+run
+check "wakes the bot on a review of any reviewer and names each one" "$(posted 7)" '@homelab-cyrus[bot] há 3 threads abertas de Revisores no commit abc123: https://github.com/o/r/pull/7#pullrequestreview-99
+
+- greptile-apps[bot]: 1
+- homelab-octopus[bot]: 2
+
+<!-- cyrus-ci-failure sha=abc123 -->'
+
+setup
+review_event homelab-octopus[bot]
+pr 7
+comments 7
+threads "$(thread false homelab-octopus homelab-octopus)"
+run
+check "names only the reviewers with open threads" "$(posted 7)" '@homelab-cyrus[bot] há 1 threads abertas de Revisores no commit abc123: https://github.com/o/r/pull/7#pullrequestreview-99
+
+- homelab-octopus[bot]: 1
+
+<!-- cyrus-ci-failure sha=abc123 -->'
+
+setup
+review_event homelab-octopus[bot]
+pr 7
+comments 7 "$(relay_comment "$review_body")"
+threads "$(thread false greptile-apps greptile-apps)" "$(thread false homelab-octopus homelab-octopus)"
+run
+check "skips a second review on a SHA already reported by another reviewer" "$(posted 7)|$(cat "$work/out")" "|PR #7 already reported for abc123"
+
+setup
+review_event lcnascimento
+pr 7
+comments 7
+threads "$(thread false greptile-apps greptile-apps)"
+run
+check "ignores a review by a login outside the list" "$(posted 7)|$(cat "$work/out")" "|review 99 by lcnascimento is not of a reviewer"
+
+setup
+review_event homelab-octopus[bot]
+pr 7
+comments 7
+threads "$(thread false homelab-octopus homelab-octopus)"
+REVIEWERS=$'\n  greptile-apps[bot]  \n\nHomelab-Octopus[bot]\n' run
+check "trims blank lines and spaces of the reviewer list" "$(posted 7)" '@homelab-cyrus[bot] há 1 threads abertas de Revisores no commit abc123: https://github.com/o/r/pull/7#pullrequestreview-99
+
+- Homelab-Octopus[bot]: 1
 
 <!-- cyrus-ci-failure sha=abc123 -->'
 
