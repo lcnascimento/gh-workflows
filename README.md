@@ -106,9 +106,9 @@ Lidas do repo ou da organização do caller:
 
 O job `qualflare` junta os artifacts do `.reports/` de todos os níveis e faz um upload só por run, com a `qualflare/qualflare-action` e o `qf` em versão fixa. Só o `push` na branch default publica, para caber no teto de 250 uploads por mês do plano Starter. Um PR nunca gera launch.
 
-- O launch vai para o projeto do token, com o environment igual ao nome do repo (`QF_ENVIRONMENT`). O environment precisa existir no projeto `consumers` antes do primeiro upload.
+- O token escolhe o projeto do Qualflare: `consumers` é só o identificador local do `qf` no runner. O launch leva o environment igual ao nome do repo (`QF_ENVIRONMENT`), que precisa existir no projeto antes do primeiro upload.
 - O upload roda com `continue-on-error`: o Qualflare fora do ar, o teto estourado ou um token inválido deixam o job verde, com um aviso no job summary.
-- Quando o Qualflare responde 401, o aviso diz que o `QUALFLARE_TOKEN` venceu. O token dura até 90 dias e a rotação é manual.
+- Quando o Qualflare responde 401, o aviso diz que o secret `qualflare-token` venceu. O token dura até 90 dias e a rotação é manual.
 - Sem nenhum `.reports/*.xml` na run, o job só registra uma notice e não chama o Qualflare.
 
 ## `sonarqube.yml`
