@@ -109,8 +109,19 @@ jobs:
     secrets:
       doppler-token: dp.st.hlb-206-dummy
 
+  reports:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+    with:
+      working-directory: testdata/ci/reports
+      sonar: false
+      qualflare: true
+    secrets:
+      qualflare-token: qfp_hlb-434-invalid
+
   assert-levels:
-    needs: [clean, levels, doppler]
+    needs: [clean, levels, doppler, reports]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -120,6 +131,7 @@ jobs:
       - env:
           GH_TOKEN: ${{ github.token }}
           RUN: repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}/jobs
+          QUALFLARE: ${{ github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && 'success' || 'skipped' }}
         run: |
           jobs=$(gh api --paginate "$RUN" --jq '.jobs[] | {name, conclusion}' | jq -s .)
           status=0
@@ -127,8 +139,11 @@ jobs:
             got=$(jq -r --arg n "$name" '.[] | select(.name == $n or (.name | endswith(" / " + $n))) | .conclusion' <<<"$jobs")
             echo "$name: want $conclusion got $got"
             [[ "$got" == "$conclusion" ]] || status=1
-          done <<'EXPECT'
+          done <<EXPECT
           clean / test-unit|success
+          clean / qualflare|skipped
+          reports / test-unit|success
+          reports / qualflare|$QUALFLARE
           clean / test-component|skipped
           clean / test-integration|skipped
           clean / test-e2e|skipped
@@ -166,3 +181,23 @@ jobs:
           $LEVELS-unit/unit.out"
           test -f "$TYPESCRIPT-unit/unit.lcov"
           test -f "$PYTHON-unit/unit.xml"
+
+  assert-reports:
+    needs: reports
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: ${{ needs.reports.outputs.reports-artifact }}-*
+          path: reports
+          merge-multiple: true
+      - env:
+          REPORTS: ${{ needs.reports.outputs.reports-artifact }}
+        working-directory: reports
+        run: |
+          find . -type f | sort
+          [[ -n "$REPORTS" ]]
+          test "$(find . -type f | sort)" = ./unit.xml
+          grep -q 'name="fixture"' unit.xml
