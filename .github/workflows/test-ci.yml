@@ -192,10 +192,12 @@ jobs:
         with:
           pattern: ${{ needs.reports.outputs.reports-artifact }}-*
           path: reports
+          merge-multiple: true
       - env:
           REPORTS: ${{ needs.reports.outputs.reports-artifact }}
         working-directory: reports
         run: |
           find . -type f | sort
           [[ -n "$REPORTS" ]]
-          test "$(find . -type f | sort)" = "./$REPORTS-unit/unit.xml"
+          test "$(find . -type f | sort)" = ./unit.xml
+          grep -q 'name="fixture"' unit.xml
