@@ -19,12 +19,19 @@ on:
         description: Sonar project key; defaults to the repository name
         type: string
         default: ''
+      qualflare:
+        description: Upload the .reports/ of every test level to the Qualflare project consumers on pushes to the default branch
+        type: boolean
+        default: false
     secrets:
       sonar-token:
         description: Analysis token of the Sonar project; required unless sonar is false
         required: false
       doppler-token:
         description: Doppler service token; test.integration and test.e2e run under doppler run when set
+        required: false
+      qualflare-token:
+        description: Qualflare project token; required when qualflare is true
         required: false
     outputs:
       runner:
@@ -33,6 +40,9 @@ on:
       coverage-artifact:
         description: Prefix of the per-level coverage artifacts, named <prefix>-<level>
         value: ${{ jobs.discover.outputs.coverage-artifact }}
+      reports-artifact:
+        description: Prefix of the per-level test report artifacts, named <prefix>-<level>
+        value: ${{ jobs.discover.outputs.reports-artifact }}
 
 permissions: {}
 
@@ -45,6 +55,7 @@ jobs:
     outputs:
       runner: ${{ inputs.runner || vars.CI_RUNNER || 'ubuntu-latest' }}
       coverage-artifact: ${{ steps.levels.outputs.coverage-artifact }}
+      reports-artifact: ${{ steps.levels.outputs.reports-artifact }}
       test-component: ${{ steps.levels.outputs.component }}
       test-integration: ${{ steps.levels.outputs.integration }}
       test-e2e: ${{ steps.levels.outputs.e2e }}
@@ -59,7 +70,9 @@ jobs:
             make -n "test.$level" >/dev/null 2>&1 && present=true || present=false
             echo "$level=$present" >> "$GITHUB_OUTPUT"
           done
-          echo "coverage-artifact=coverage-$(head -c 4 /dev/urandom | od -An -tx1 | tr -d ' \n')" >> "$GITHUB_OUTPUT"
+          suffix=$(head -c 4 /dev/urandom | od -An -tx1 | tr -d ' \n')
+          echo "coverage-artifact=coverage-$suffix" >> "$GITHUB_OUTPUT"
+          echo "reports-artifact=reports-$suffix" >> "$GITHUB_OUTPUT"
 
   lint:
     needs: discover
@@ -112,6 +125,13 @@ jobs:
           path: ${{ inputs.working-directory }}/.coverage/
           include-hidden-files: true
           if-no-files-found: ignore
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: ${{ needs.discover.outputs.reports-artifact }}-unit
+          path: ${{ inputs.working-directory }}/.reports/
+          include-hidden-files: true
+          if-no-files-found: ignore
 
   test-component:
     needs: discover
@@ -137,6 +157,13 @@ jobs:
         with:
           name: ${{ needs.discover.outputs.coverage-artifact }}-component
           path: ${{ inputs.working-directory }}/.coverage/
+          include-hidden-files: true
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: ${{ needs.discover.outputs.reports-artifact }}-component
+          path: ${{ inputs.working-directory }}/.reports/
           include-hidden-files: true
           if-no-files-found: ignore
 
@@ -175,6 +202,13 @@ jobs:
           path: ${{ inputs.working-directory }}/.coverage/
           include-hidden-files: true
           if-no-files-found: ignore
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: ${{ needs.discover.outputs.reports-artifact }}-integration
+          path: ${{ inputs.working-directory }}/.reports/
+          include-hidden-files: true
+          if-no-files-found: ignore
 
   test-e2e:
     needs: discover
@@ -211,6 +245,13 @@ jobs:
           path: ${{ inputs.working-directory }}/.coverage/
           include-hidden-files: true
           if-no-files-found: ignore
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: ${{ needs.discover.outputs.reports-artifact }}-e2e
+          path: ${{ inputs.working-directory }}/.reports/
+          include-hidden-files: true
+          if-no-files-found: ignore
 
   sonarqube:
     needs: [discover, test-unit, test-component, test-integration, test-e2e]
@@ -225,3 +266,50 @@ jobs:
       coverage-artifact: ${{ needs.discover.outputs.coverage-artifact }}
     secrets:
       sonar-token: ${{ secrets.sonar-token }}
+
+  qualflare:
+    needs: [discover, test-unit, test-component, test-integration, test-e2e]
+    if: >-
+      !cancelled() && inputs.qualflare && needs.discover.result == 'success'
+      && github.event_name == 'push'
+      && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ${{ needs.discover.outputs.runner }}
+    timeout-minutes: 10
+    permissions: {}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: ${{ needs.discover.outputs.reports-artifact }}-*
+          path: .reports
+          merge-multiple: true
+      - id: reports
+        run: |
+          if compgen -G '.reports/*.xml' >/dev/null; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::No .reports/*.xml in this run; nothing to upload to Qualflare"
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+      - id: upload
+        if: steps.reports.outputs.present == 'true'
+        continue-on-error: true
+        uses: qualflare/qualflare-action@30e535a6b63ffe5ee2f82270a75a9ab282fcac7d # v1.0.3
+        env:
+          QF_ENVIRONMENT: ${{ github.event.repository.name }}
+        with:
+          token: ${{ secrets.qualflare-token }}
+          project: consumers
+          results: .reports/*.xml
+          # renovate: datasource=github-releases depName=Qualflare/qualflare-cli
+          version: 0.6.0
+      - if: steps.upload.outcome == 'failure'
+        run: |
+          probe=$(qf consumers launches list 2>&1 >/dev/null) || true
+          if [[ "$probe" == *"(status: 401)"* ]]; then
+            message="Qualflare rejected the token (401): QUALFLARE_TOKEN expired. Rotate it and run make apply in the homelab."
+          else
+            message="Qualflare upload failed; see the upload step log. Test results stay in the reports artifacts."
+          fi
+          echo "::warning::$message"
+          echo "> [!WARNING]" >> "$GITHUB_STEP_SUMMARY"
+          echo "> $message" >> "$GITHUB_STEP_SUMMARY"

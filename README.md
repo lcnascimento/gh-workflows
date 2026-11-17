@@ -5,7 +5,7 @@ Workflows reusáveis e composite actions da CI dos Consumidores. Um repo em Go, 
 
 | Componente | Referência | O que faz |
 |---|---|---|
-| `ci.yml` | `lcnascimento/gh-workflows/.github/workflows/ci.yml` | CI completa: `discover`, `lint`, um job por nível de teste e o `sonarqube` aninhado. |
+| `ci.yml` | `lcnascimento/gh-workflows/.github/workflows/ci.yml` | CI completa: `discover`, `lint`, um job por nível de teste, o `sonarqube` aninhado e o upload ao Qualflare. |
 | `sonarqube.yml` | `lcnascimento/gh-workflows/.github/workflows/sonarqube.yml` | Uma análise do SonarQube, invocável sozinha. |
 | `relay.yml` | `lcnascimento/gh-workflows/.github/workflows/relay.yml` | Acorda o bot do Cyrus quando a CI de um PR dele falha ou o check "SonarQube Code Analysis" reprova, com limite de iterações por PR. |
 | `lint-workflows` | `lcnascimento/gh-workflows/actions/lint-workflows` | actionlint e zizmor sobre os workflows do repo. |
@@ -38,6 +38,7 @@ O `ci.yml` não conhece a linguagem do Consumidor. Ele instala o runtime pelo ma
 
 - O Makefile põe `.bin/` no `PATH` com `export PATH := $(CURDIR)/.bin:$(PATH)`, e `.bin/` fica no `.gitignore`.
 - Os targets `test.*` escrevem a cobertura em `.coverage/`, um arquivo por nível, com a extensão do formato: `.out` (coverprofile do Go), `.lcov` (JS/TS) e `.xml` (Cobertura do Python). Ex.: `.coverage/unit.out`. O Sonar recebe cada arquivo pela extensão, sem configuração no Consumidor.
+- Os targets `test.*` escrevem os resultados em JUnit em `.reports/<nível>.xml`, ex.: `.reports/unit.xml`. Outros formatos podem ficar ao lado, mas só os `.xml` vão ao Qualflare. `.reports/` fica no `.gitignore`.
 - O runtime vem do manifesto, sem versão no workflow:
 
   | Manifesto | Action |
@@ -60,6 +61,7 @@ O `ci.yml` não conhece a linguagem do Consumidor. Ele instala o runtime pelo ma
 | `working-directory` | string | `.` | Diretório do Makefile e dos manifestos, relativo à raiz do repo. |
 | `sonar` | boolean | `true` | Roda a análise do SonarQube depois dos testes. |
 | `project-key` | string | `''` | Chave do projeto Sonar. Vazio usa o nome do repo. |
+| `qualflare` | boolean | `false` | Envia o `.reports/` de todos os níveis ao projeto `consumers` do Qualflare, só em `push` na branch default. |
 
 ### Secrets
 
@@ -69,6 +71,7 @@ Os secrets têm nome de propósito. Passe cada um explicitamente; nunca use `sec
 |---|---|---|
 | `sonar-token` | só com `sonar: true` | Token de análise do projeto Sonar. Sem ele o job `sonarqube` falha no step `sonar-token`; um repo sem Sonar chama com `sonar: false`. |
 | `doppler-token` | não | Service token do Doppler. Com ele, só `test.integration` e `test.e2e` rodam sob `doppler run`, e o token só existe no step do `make`. Sem ele, os targets rodam com `make` direto. |
+| `qualflare-token` | só com `qualflare: true` | Token de projeto do Qualflare (`qfp_…`). |
 
 ### Outputs
 
@@ -76,6 +79,7 @@ Os secrets têm nome de propósito. Passe cada um explicitamente; nunca use `sec
 |---|---|
 | `runner` | Label do runner em que os jobs rodaram. |
 | `coverage-artifact` | Prefixo dos artifacts de cobertura, um por nível, com nome `<prefix>-<nível>`. Baixe com `actions/download-artifact` e `pattern: <prefix>-*`. |
+| `reports-artifact` | Prefixo dos artifacts do `.reports/`, um por nível, com nome `<prefix>-<nível>`. Sobem em toda run que gera o diretório, mesmo com teste falhando. |
 
 ### Variáveis
 
@@ -96,6 +100,16 @@ Lidas do repo ou da organização do caller:
 | `test-unit` | depois do `discover` | `contents: read` |
 | `test-component`, `test-integration`, `test-e2e` | o target existe | `contents: read` |
 | `sonarqube` | `sonar: true`, nenhum teste falhou e a run não foi cancelada | `contents: read` |
+| `qualflare` | `qualflare: true`, `push` na branch default e a run não foi cancelada, mesmo com teste falhando | nenhuma |
+
+### Qualflare
+
+O job `qualflare` junta os artifacts do `.reports/` de todos os níveis e faz um upload só por run, com a `qualflare/qualflare-action` e o `qf` em versão fixa. Só o `push` na branch default publica, para caber no teto de 250 uploads por mês do plano Starter. Um PR nunca gera launch.
+
+- O launch vai para o projeto do token, com o environment igual ao nome do repo (`QF_ENVIRONMENT`). O environment precisa existir no projeto `consumers` antes do primeiro upload.
+- O upload roda com `continue-on-error`: o Qualflare fora do ar, o teto estourado ou um token inválido deixam o job verde, com um aviso no job summary.
+- Quando o Qualflare responde 401, o aviso diz que o `QUALFLARE_TOKEN` venceu. O token dura até 90 dias e a rotação é manual.
+- Sem nenhum `.reports/*.xml` na run, o job só registra uma notice e não chama o Qualflare.
 
 ## `sonarqube.yml`
 
